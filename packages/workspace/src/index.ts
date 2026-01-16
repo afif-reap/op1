@@ -472,6 +472,9 @@ function getPlanName(planPath: string): string {
 	return basename(planPath, ".md");
 }
 
+// Export functions for testing
+export { extractMarkdownParts, parsePlanMarkdown, formatGitStats };
+
 export const WorkspacePlugin: Plugin = async (ctx) => {
 	const { directory } = ctx;
 

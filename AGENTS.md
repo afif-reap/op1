@@ -116,6 +116,15 @@ bun run build
 # Typecheck all packages
 bun run typecheck
 
+# Test all packages
+bun test
+
+# Test with coverage
+bun test --coverage
+
+# Test specific package
+bun test packages/install
+
 # Lint
 bun run lint
 
@@ -187,6 +196,141 @@ Templates are copied to user's `~/.config/opencode/` by the installer.
 | `@opencode-ai/sdk` | OpenCode SDK | notify, workspace |
 | `@opencode-ai/plugin` | Plugin interface | notify, workspace |
 
+## Testing
+
+### Overview
+
+op1 uses **Bun's built-in test runner** (`bun test`) for all testing. The test suite covers critical functionality to prevent regressions after the v0.1.0 release.
+
+**Current Coverage (v0.1.0+):**
+- 58 tests across 4 test files
+- ~27% overall code coverage
+- Focus on high-risk areas: config merging, markdown parsing, quiet hours logic
+
+### Test Commands
+
+```bash
+# Run all tests
+bun test
+
+# Run tests in watch mode
+bun test --watch
+
+# Run tests with coverage report
+bun test --coverage
+
+# Test specific package
+bun test packages/install
+bun test packages/notify
+bun test packages/workspace
+```
+
+### Test Structure
+
+Tests follow a **hybrid colocated + integration** pattern:
+
+```
+packages/
+├── install/
+│   └── src/
+│       ├── __tests__/
+│       │   ├── mergeConfig.test.ts    # Unit tests for config merging
+│       │   └── fileUtils.test.ts      # Unit tests for file operations
+│       └── index.ts
+├── notify/
+│   └── src/
+│       ├── __tests__/
+│       │   └── quietHours.test.ts     # Unit tests for quiet hours logic
+│       └── index.ts
+└── workspace/
+    └── src/
+        ├── __tests__/
+        │   └── parsing.test.ts         # Unit tests for markdown parsing
+        └── index.ts
+```
+
+### Global Test Utilities
+
+`test-setup.ts` at the root provides shared helpers:
+
+```typescript
+import { createTempDir, initGitRepo, runGit } from "./test-setup";
+
+// Create temp directory for filesystem tests
+const { path: tempDir, cleanup } = await createTempDir();
+try {
+  // ... test logic
+} finally {
+  await cleanup();
+}
+```
+
+### Writing New Tests
+
+**1. Export functions for testing:**
+
+```typescript
+// At the end of your source file
+export { functionToTest, helperFunction };
+```
+
+**2. Create test file:**
+
+```typescript
+import { describe, test, expect } from "bun:test";
+import { functionToTest } from "../index";
+
+describe("functionToTest", () => {
+  test("handles basic case", () => {
+    const result = functionToTest("input");
+    expect(result).toBe("expected");
+  });
+});
+```
+
+**3. Use Bun-native APIs in tests:**
+
+```typescript
+// ✅ DO: Use Bun.file for file operations
+const file = Bun.file(path);
+await Bun.write(path, "content");
+
+// ✅ DO: Use temp directories for isolation
+const { path, cleanup } = await createTempDir();
+
+// ✅ DO: Use Bun.spawn for command execution
+const proc = Bun.spawn(["git", "status"], { cwd: dir, stdout: "pipe" });
+```
+
+### Test Coverage Priorities
+
+**High Priority (Already Tested):**
+- ✅ `mergeConfig` - Config merging preserves user settings
+- ✅ `parsePlanMarkdown` - Plan validation and parsing
+- ✅ `extractMarkdownParts` - Regex parsing logic
+- ✅ `isQuietHours` - Time-based notification suppression
+- ✅ File utilities - Bun-native file operations
+
+**Medium Priority (Future Work):**
+- Plan tools integration tests
+- Notify plugin event handlers
+- CLI interactive flows
+
+**Low Priority:**
+- Full plugin lifecycle tests
+- Platform-specific notification tests
+
+### Configuration
+
+Tests are configured in `bunfig.toml`:
+
+```toml
+[test]
+preload = ["./test-setup.ts"]
+timeout = 10000
+coverage = true
+```
+
 ## Debugging
 
 ### Build Issues
@@ -202,6 +346,19 @@ bun run build
 ```bash
 # Check specific package
 bun run typecheck --filter @op1/workspace
+```
+
+### Test Failures
+
+```bash
+# Run specific test file
+bun test packages/install/src/__tests__/mergeConfig.test.ts
+
+# Run with verbose output
+bun test --verbose
+
+# Run single test by name
+bun test --test-name-pattern "merges MCPs"
 ```
 
 ### Runtime Issues

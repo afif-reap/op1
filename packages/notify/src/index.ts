@@ -240,14 +240,14 @@ async function isTerminalFocused(terminalInfo: TerminalInfo): Promise<boolean> {
 // QUIET HOURS CHECK
 // ==========================================
 
-function isQuietHours(config: NotifyConfig): boolean {
-	if (!config.quietHours.enabled) return false
+function isQuietHours(config: NotifyConfig["quietHours"], currentTime?: Date): boolean {
+	if (!config.enabled) return false
 
-	const now = new Date()
+	const now = currentTime || new Date()
 	const currentMinutes = now.getHours() * 60 + now.getMinutes()
 
-	const [startHour, startMin] = config.quietHours.start.split(":").map(Number)
-	const [endHour, endMin] = config.quietHours.end.split(":").map(Number)
+	const [startHour, startMin] = config.start.split(":").map(Number)
+	const [endHour, endMin] = config.end.split(":").map(Number)
 
 	const startMinutes = startHour * 60 + startMin
 	const endMinutes = endHour * 60 + endMin
@@ -484,7 +484,7 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 			}
 
 			// Check quiet hours
-			if (isQuietHours(config)) return
+			if (isQuietHours(config.quietHours)) return
 
 			// Check if terminal is focused
 			if (await isTerminalFocused(terminalInfo)) return
@@ -601,7 +601,7 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 					if (!isParent) return
 				}
 
-				if (isQuietHours(config)) return
+				if (isQuietHours(config.quietHours)) return
 				if (await isTerminalFocused(terminalInfo)) return
 
 				const errorMessage =
@@ -629,7 +629,7 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 
 			// Handle permission requests
 			if (event.type === "permission.updated") {
-				if (isQuietHours(config)) return
+				if (isQuietHours(config.quietHours)) return
 				if (await isTerminalFocused(terminalInfo)) return
 
 				await sendDesktopNotification(
@@ -664,3 +664,6 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 		},
 	}
 }
+
+// Export functions for testing
+export { isQuietHours, detectTerminal };

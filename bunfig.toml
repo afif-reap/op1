@@ -9,3 +9,14 @@ auto = "fallback"
 [install.lockfile]
 # Use text lockfile for better git diffs
 save = true
+
+# Bun Test Configuration
+[test]
+# Global test setup (mocks, environment variables)
+preload = ["./test-setup.ts"]
+
+# Timeout for slow integration tests (10 seconds)
+timeout = 10000
+
+# Coverage configuration
+coverage = true
