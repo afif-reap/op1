@@ -1,7 +1,6 @@
 ---
 description: Contextual grep for codebases - find files, patterns, implementations
 mode: subagent
-model: zai-coding-plan/glm-4.7
 temperature: 0.1
 permission:
   edit: deny

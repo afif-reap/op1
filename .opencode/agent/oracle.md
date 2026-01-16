@@ -1,7 +1,6 @@
 ---
 description: High-IQ consultation for architecture, debugging, strategic decisions
 mode: subagent
-model: quotio/gpt-5.2-codex
 temperature: 0.1
 permission:
   edit: deny

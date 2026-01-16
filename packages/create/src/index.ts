@@ -180,6 +180,36 @@ interface PluginChoice {
 	workspace: boolean;
 }
 
+// Agent model configuration
+interface AgentModelConfig {
+	// Agents that need high-reasoning models (plan, oracle, reviewer)
+	thinking: string | null;
+	// Agents that write code (coder, frontend, build)
+	coding: string | null;
+	// Agents that do fast exploration (explore, researcher, scribe)
+	fast: string | null;
+}
+
+// Agent categories for model assignment
+const AGENT_MODEL_CATEGORIES = {
+	thinking: ["plan", "oracle", "reviewer"],
+	coding: ["coder", "frontend", "build"],
+	fast: ["explore", "researcher", "scribe"],
+} as const;
+
+// Default models (sensible defaults that work with standard providers)
+const DEFAULT_AGENT_MODELS: AgentModelConfig = {
+	thinking: null, // Use global model
+	coding: null,   // Use global model
+	fast: null,     // Use global model
+};
+
+interface AgentConfig {
+	tools?: Record<string, boolean>;
+	model?: string;
+	[key: string]: unknown;
+}
+
 interface OpenCodeConfig {
 	$schema?: string;
 	plugin?: string[];
@@ -189,7 +219,7 @@ interface OpenCodeConfig {
 	permission?: Record<string, string>;
 	mcp?: Record<string, McpConfig>;
 	tools?: Record<string, boolean>;
-	agent?: Record<string, { tools?: Record<string, boolean> }>;
+	agent?: Record<string, AgentConfig>;
 	compaction?: { auto?: boolean; prune?: boolean };
 	provider?: Record<string, unknown>;
 	[key: string]: unknown;
@@ -281,7 +311,8 @@ async function backupConfig(configDir: string): Promise<string | null> {
 function mergeConfig(
 	existing: OpenCodeConfig | null,
 	selectedMcps: McpDefinition[],
-	pluginChoices: PluginChoice
+	pluginChoices: PluginChoice,
+	agentModels: AgentModelConfig
 ): OpenCodeConfig {
 	const base: OpenCodeConfig = existing || {
 		$schema: "https://opencode.ai/config.json",
@@ -348,7 +379,7 @@ function mergeConfig(
 		}
 	}
 
-	// 6. Merge agent tool overrides
+	// 6. Merge agent config (tools + models)
 	base.agent = base.agent || {};
 	
 	// Build agent -> tools mapping from selected MCPs
@@ -365,7 +396,7 @@ function mergeConfig(
 	// Apply agent tool overrides
 	for (const [agentName, tools] of Object.entries(agentTools)) {
 		if (!base.agent[agentName]) {
-			base.agent[agentName] = { tools: {} };
+			base.agent[agentName] = {};
 		}
 		if (!base.agent[agentName].tools) {
 			base.agent[agentName].tools = {};
@@ -374,6 +405,24 @@ function mergeConfig(
 			// Only set to true if not already configured
 			if (base.agent[agentName].tools![tool] === undefined) {
 				base.agent[agentName].tools![tool] = true;
+			}
+		}
+	}
+
+	// 7. Merge agent models (preserve existing, add new)
+	for (const [category, agents] of Object.entries(AGENT_MODEL_CATEGORIES)) {
+		const modelKey = category as keyof AgentModelConfig;
+		const model = agentModels[modelKey];
+		
+		if (model) {
+			for (const agentName of agents) {
+				if (!base.agent[agentName]) {
+					base.agent[agentName] = {};
+				}
+				// Only set if not already configured (preserve user's existing choice)
+				if (!base.agent[agentName].model) {
+					base.agent[agentName].model = model;
+				}
 			}
 		}
 	}
@@ -634,6 +683,51 @@ export async function main() {
 		}
 	}
 
+	// Agent Model Configuration (only if agents are being installed)
+	let agentModels: AgentModelConfig = { ...DEFAULT_AGENT_MODELS };
+	
+	if (options.agents) {
+		p.log.info(`\n${pc.bold("Agent Model Configuration")}`);
+		p.log.info(pc.dim("Models are stored in opencode.json, preserved across updates."));
+		
+		const configureModels = await p.confirm({
+			message: "Configure per-agent models? (Skip to use global default)",
+			initialValue: false,
+		});
+
+		if (!p.isCancel(configureModels) && configureModels) {
+			// Thinking agents (plan, oracle, reviewer) - need high reasoning
+			const thinkingModel = await p.text({
+				message: "Model for thinking agents (plan, oracle, reviewer):",
+				placeholder: "anthropic/claude-sonnet-4-20250514 or leave empty for global",
+				defaultValue: "",
+			});
+			if (!p.isCancel(thinkingModel) && thinkingModel.trim()) {
+				agentModels.thinking = thinkingModel.trim();
+			}
+
+			// Coding agents (coder, frontend, build) - need good code generation
+			const codingModel = await p.text({
+				message: "Model for coding agents (coder, frontend, build):",
+				placeholder: "anthropic/claude-sonnet-4-20250514 or leave empty for global",
+				defaultValue: "",
+			});
+			if (!p.isCancel(codingModel) && codingModel.trim()) {
+				agentModels.coding = codingModel.trim();
+			}
+
+			// Fast agents (explore, researcher, scribe) - need speed over quality
+			const fastModel = await p.text({
+				message: "Model for fast agents (explore, researcher, scribe):",
+				placeholder: "anthropic/claude-haiku-3-5-20241022 or leave empty for global",
+				defaultValue: "",
+			});
+			if (!p.isCancel(fastModel) && fastModel.trim()) {
+				agentModels.fast = fastModel.trim();
+			}
+		}
+	}
+
 	// Installation
 	const s = p.spinner();
 	s.start("Installing op1 components...");
@@ -672,7 +766,7 @@ export async function main() {
 		}
 
 		// Merge and write config
-		const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices);
+		const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices, agentModels);
 		await writeJsonFile(globalConfigFile, mergedConfig);
 		totalFiles++;
 

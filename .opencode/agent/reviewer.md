@@ -1,7 +1,6 @@
 ---
 description: Code review specialist - security, performance, philosophy compliance
 mode: subagent
-model: quotio/gpt-5.2-codex
 temperature: 0.1
 permission:
   edit: deny

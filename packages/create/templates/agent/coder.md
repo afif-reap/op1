@@ -1,7 +1,6 @@
 ---
 description: Focused implementation specialist - atomic coding tasks
 mode: subagent
-model: quotio/gemini-claude-sonnet-4-5
 temperature: 0.2
 ---
 

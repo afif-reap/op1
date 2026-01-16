@@ -156,6 +156,7 @@ import { stripVTControlCharacters as T2 } from "util";
 
 // ../../node_modules/.bun/@clack+core@0.4.1/node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
+var import_picocolors = __toESM(require_picocolors(), 1);
 import { stdin as $, stdout as j } from "process";
 import * as f from "readline";
 import M from "readline";
@@ -590,9 +591,27 @@ class jD extends x {
     this.value = this._value.value;
   }
 }
+class PD extends x {
+  get valueWithCursor() {
+    if (this.state === "submit")
+      return this.value;
+    if (this.cursor >= this.value.length)
+      return `${this.value}\u2588`;
+    const u = this.value.slice(0, this.cursor), [F, ...e] = this.value.slice(this.cursor);
+    return `${u}${import_picocolors.default.inverse(F)}${e.join("")}`;
+  }
+  get cursor() {
+    return this._cursor;
+  }
+  constructor(u) {
+    super(u), this.on("finalize", () => {
+      this.value || (this.value = u.defaultValue);
+    });
+  }
+}
 
 // ../../node_modules/.bun/@clack+prompts@0.9.1/node_modules/@clack/prompts/dist/index.mjs
-var import_picocolors = __toESM(require_picocolors(), 1);
+var import_picocolors2 = __toESM(require_picocolors(), 1);
 var import_sisteransi2 = __toESM(require_src(), 1);
 import p from "process";
 function X2() {
@@ -625,13 +644,13 @@ var y2 = (s) => {
   switch (s) {
     case "initial":
     case "active":
-      return import_picocolors.default.cyan(ee);
+      return import_picocolors2.default.cyan(ee);
     case "cancel":
-      return import_picocolors.default.red(A2);
+      return import_picocolors2.default.red(A2);
     case "error":
-      return import_picocolors.default.yellow(B);
+      return import_picocolors2.default.yellow(B);
     case "submit":
-      return import_picocolors.default.green(S2);
+      return import_picocolors2.default.green(S2);
   }
 };
 var k2 = (s) => {
@@ -641,24 +660,45 @@ var k2 = (s) => {
   const $2 = o < t.length && l2 > 0, d2 = o < t.length && l2 + o < t.length;
   return t.slice(l2, l2 + o).map((w2, b2, C) => {
     const I2 = b2 === 0 && $2, x2 = b2 === C.length - 1 && d2;
-    return I2 || x2 ? import_picocolors.default.dim("...") : i(w2, b2 + l2 === n);
+    return I2 || x2 ? import_picocolors2.default.dim("...") : i(w2, b2 + l2 === n);
   });
 };
+var ue = (s) => new PD({ validate: s.validate, placeholder: s.placeholder, defaultValue: s.defaultValue, initialValue: s.initialValue, render() {
+  const n = `${import_picocolors2.default.gray(a)}
+${y2(this.state)}  ${s.message}
+`, t = s.placeholder ? import_picocolors2.default.inverse(s.placeholder[0]) + import_picocolors2.default.dim(s.placeholder.slice(1)) : import_picocolors2.default.inverse(import_picocolors2.default.hidden("_")), i = this.value ? this.valueWithCursor : t;
+  switch (this.state) {
+    case "error":
+      return `${n.trim()}
+${import_picocolors2.default.yellow(a)}  ${i}
+${import_picocolors2.default.yellow(m2)}  ${import_picocolors2.default.yellow(this.error)}
+`;
+    case "submit":
+      return `${n}${import_picocolors2.default.gray(a)}  ${import_picocolors2.default.dim(this.value || s.placeholder)}`;
+    case "cancel":
+      return `${n}${import_picocolors2.default.gray(a)}  ${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(this.value ?? ""))}${this.value?.trim() ? `
+${import_picocolors2.default.gray(a)}` : ""}`;
+    default:
+      return `${n}${import_picocolors2.default.cyan(a)}  ${i}
+${import_picocolors2.default.cyan(m2)}
+`;
+  }
+} }).prompt();
 var me = (s) => {
   const n = s.active ?? "Yes", t = s.inactive ?? "No";
   return new fD({ active: n, inactive: t, initialValue: s.initialValue ?? true, render() {
-    const i = `${import_picocolors.default.gray(a)}
+    const i = `${import_picocolors2.default.gray(a)}
 ${y2(this.state)}  ${s.message}
 `, r2 = this.value ? n : t;
     switch (this.state) {
       case "submit":
-        return `${i}${import_picocolors.default.gray(a)}  ${import_picocolors.default.dim(r2)}`;
+        return `${i}${import_picocolors2.default.gray(a)}  ${import_picocolors2.default.dim(r2)}`;
       case "cancel":
-        return `${i}${import_picocolors.default.gray(a)}  ${import_picocolors.default.strikethrough(import_picocolors.default.dim(r2))}
-${import_picocolors.default.gray(a)}`;
+        return `${i}${import_picocolors2.default.gray(a)}  ${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(r2))}
+${import_picocolors2.default.gray(a)}`;
       default:
-        return `${i}${import_picocolors.default.cyan(a)}  ${this.value ? `${import_picocolors.default.green(j2)} ${n}` : `${import_picocolors.default.dim(R2)} ${import_picocolors.default.dim(n)}`} ${import_picocolors.default.dim("/")} ${this.value ? `${import_picocolors.default.dim(R2)} ${import_picocolors.default.dim(t)}` : `${import_picocolors.default.green(j2)} ${t}`}
-${import_picocolors.default.cyan(m2)}
+        return `${i}${import_picocolors2.default.cyan(a)}  ${this.value ? `${import_picocolors2.default.green(j2)} ${n}` : `${import_picocolors2.default.dim(R2)} ${import_picocolors2.default.dim(n)}`} ${import_picocolors2.default.dim("/")} ${this.value ? `${import_picocolors2.default.dim(R2)} ${import_picocolors2.default.dim(t)}` : `${import_picocolors2.default.green(j2)} ${t}`}
+${import_picocolors2.default.cyan(m2)}
 `;
     }
   } }).prompt();
@@ -668,29 +708,29 @@ var de = (s) => {
     const r2 = t.label ?? String(t.value);
     switch (i) {
       case "selected":
-        return `${import_picocolors.default.dim(r2)}`;
+        return `${import_picocolors2.default.dim(r2)}`;
       case "active":
-        return `${import_picocolors.default.green(j2)} ${r2} ${t.hint ? import_picocolors.default.dim(`(${t.hint})`) : ""}`;
+        return `${import_picocolors2.default.green(j2)} ${r2} ${t.hint ? import_picocolors2.default.dim(`(${t.hint})`) : ""}`;
       case "cancelled":
-        return `${import_picocolors.default.strikethrough(import_picocolors.default.dim(r2))}`;
+        return `${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(r2))}`;
       default:
-        return `${import_picocolors.default.dim(R2)} ${import_picocolors.default.dim(r2)}`;
+        return `${import_picocolors2.default.dim(R2)} ${import_picocolors2.default.dim(r2)}`;
     }
   };
   return new jD({ options: s.options, initialValue: s.initialValue, render() {
-    const t = `${import_picocolors.default.gray(a)}
+    const t = `${import_picocolors2.default.gray(a)}
 ${y2(this.state)}  ${s.message}
 `;
     switch (this.state) {
       case "submit":
-        return `${t}${import_picocolors.default.gray(a)}  ${n(this.options[this.cursor], "selected")}`;
+        return `${t}${import_picocolors2.default.gray(a)}  ${n(this.options[this.cursor], "selected")}`;
       case "cancel":
-        return `${t}${import_picocolors.default.gray(a)}  ${n(this.options[this.cursor], "cancelled")}
-${import_picocolors.default.gray(a)}`;
+        return `${t}${import_picocolors2.default.gray(a)}  ${n(this.options[this.cursor], "cancelled")}
+${import_picocolors2.default.gray(a)}`;
       default:
-        return `${t}${import_picocolors.default.cyan(a)}  ${k2({ cursor: this.cursor, options: this.options, maxItems: s.maxItems, style: (i, r2) => n(i, r2 ? "active" : "inactive") }).join(`
-${import_picocolors.default.cyan(a)}  `)}
-${import_picocolors.default.cyan(m2)}
+        return `${t}${import_picocolors2.default.cyan(a)}  ${k2({ cursor: this.cursor, options: this.options, maxItems: s.maxItems, style: (i, r2) => n(i, r2 ? "active" : "inactive") }).join(`
+${import_picocolors2.default.cyan(a)}  `)}
+${import_picocolors2.default.cyan(m2)}
 `;
     }
   } }).prompt();
@@ -698,14 +738,14 @@ ${import_picocolors.default.cyan(m2)}
 var pe = (s) => {
   const n = (t, i) => {
     const r2 = t.label ?? String(t.value);
-    return i === "active" ? `${import_picocolors.default.cyan(V2)} ${r2} ${t.hint ? import_picocolors.default.dim(`(${t.hint})`) : ""}` : i === "selected" ? `${import_picocolors.default.green(M2)} ${import_picocolors.default.dim(r2)}` : i === "cancelled" ? `${import_picocolors.default.strikethrough(import_picocolors.default.dim(r2))}` : i === "active-selected" ? `${import_picocolors.default.green(M2)} ${r2} ${t.hint ? import_picocolors.default.dim(`(${t.hint})`) : ""}` : i === "submitted" ? `${import_picocolors.default.dim(r2)}` : `${import_picocolors.default.dim(G2)} ${import_picocolors.default.dim(r2)}`;
+    return i === "active" ? `${import_picocolors2.default.cyan(V2)} ${r2} ${t.hint ? import_picocolors2.default.dim(`(${t.hint})`) : ""}` : i === "selected" ? `${import_picocolors2.default.green(M2)} ${import_picocolors2.default.dim(r2)}` : i === "cancelled" ? `${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(r2))}` : i === "active-selected" ? `${import_picocolors2.default.green(M2)} ${r2} ${t.hint ? import_picocolors2.default.dim(`(${t.hint})`) : ""}` : i === "submitted" ? `${import_picocolors2.default.dim(r2)}` : `${import_picocolors2.default.dim(G2)} ${import_picocolors2.default.dim(r2)}`;
   };
   return new wD({ options: s.options, initialValues: s.initialValues, required: s.required ?? true, cursorAt: s.cursorAt, validate(t) {
     if (this.required && t.length === 0)
       return `Please select at least one option.
-${import_picocolors.default.reset(import_picocolors.default.dim(`Press ${import_picocolors.default.gray(import_picocolors.default.bgWhite(import_picocolors.default.inverse(" space ")))} to select, ${import_picocolors.default.gray(import_picocolors.default.bgWhite(import_picocolors.default.inverse(" enter ")))} to submit`))}`;
+${import_picocolors2.default.reset(import_picocolors2.default.dim(`Press ${import_picocolors2.default.gray(import_picocolors2.default.bgWhite(import_picocolors2.default.inverse(" space ")))} to select, ${import_picocolors2.default.gray(import_picocolors2.default.bgWhite(import_picocolors2.default.inverse(" enter ")))} to submit`))}`;
   }, render() {
-    const t = `${import_picocolors.default.gray(a)}
+    const t = `${import_picocolors2.default.gray(a)}
 ${y2(this.state)}  ${s.message}
 `, i = (r2, c2) => {
       const o = this.value.includes(r2.value);
@@ -713,25 +753,25 @@ ${y2(this.state)}  ${s.message}
     };
     switch (this.state) {
       case "submit":
-        return `${t}${import_picocolors.default.gray(a)}  ${this.options.filter(({ value: r2 }) => this.value.includes(r2)).map((r2) => n(r2, "submitted")).join(import_picocolors.default.dim(", ")) || import_picocolors.default.dim("none")}`;
+        return `${t}${import_picocolors2.default.gray(a)}  ${this.options.filter(({ value: r2 }) => this.value.includes(r2)).map((r2) => n(r2, "submitted")).join(import_picocolors2.default.dim(", ")) || import_picocolors2.default.dim("none")}`;
       case "cancel": {
-        const r2 = this.options.filter(({ value: c2 }) => this.value.includes(c2)).map((c2) => n(c2, "cancelled")).join(import_picocolors.default.dim(", "));
-        return `${t}${import_picocolors.default.gray(a)}  ${r2.trim() ? `${r2}
-${import_picocolors.default.gray(a)}` : ""}`;
+        const r2 = this.options.filter(({ value: c2 }) => this.value.includes(c2)).map((c2) => n(c2, "cancelled")).join(import_picocolors2.default.dim(", "));
+        return `${t}${import_picocolors2.default.gray(a)}  ${r2.trim() ? `${r2}
+${import_picocolors2.default.gray(a)}` : ""}`;
       }
       case "error": {
         const r2 = this.error.split(`
-`).map((c2, o) => o === 0 ? `${import_picocolors.default.yellow(m2)}  ${import_picocolors.default.yellow(c2)}` : `   ${c2}`).join(`
+`).map((c2, o) => o === 0 ? `${import_picocolors2.default.yellow(m2)}  ${import_picocolors2.default.yellow(c2)}` : `   ${c2}`).join(`
 `);
-        return `${t + import_picocolors.default.yellow(a)}  ${k2({ options: this.options, cursor: this.cursor, maxItems: s.maxItems, style: i }).join(`
-${import_picocolors.default.yellow(a)}  `)}
+        return `${t + import_picocolors2.default.yellow(a)}  ${k2({ options: this.options, cursor: this.cursor, maxItems: s.maxItems, style: i }).join(`
+${import_picocolors2.default.yellow(a)}  `)}
 ${r2}
 `;
       }
       default:
-        return `${t}${import_picocolors.default.cyan(a)}  ${k2({ options: this.options, cursor: this.cursor, maxItems: s.maxItems, style: i }).join(`
-${import_picocolors.default.cyan(a)}  `)}
-${import_picocolors.default.cyan(m2)}
+        return `${t}${import_picocolors2.default.cyan(a)}  ${k2({ options: this.options, cursor: this.cursor, maxItems: s.maxItems, style: i }).join(`
+${import_picocolors2.default.cyan(a)}  `)}
+${import_picocolors2.default.cyan(m2)}
 `;
     }
   } }).prompt();
@@ -743,58 +783,58 @@ ${s}
 `), i = T2(n).length, r2 = Math.max(t.reduce((o, l2) => {
     const $2 = T2(l2);
     return $2.length > o ? $2.length : o;
-  }, 0), i) + 2, c2 = t.map((o) => `${import_picocolors.default.gray(a)}  ${import_picocolors.default.dim(o)}${" ".repeat(r2 - T2(o).length)}${import_picocolors.default.gray(a)}`).join(`
+  }, 0), i) + 2, c2 = t.map((o) => `${import_picocolors2.default.gray(a)}  ${import_picocolors2.default.dim(o)}${" ".repeat(r2 - T2(o).length)}${import_picocolors2.default.gray(a)}`).join(`
 `);
-  process.stdout.write(`${import_picocolors.default.gray(a)}
-${import_picocolors.default.green(S2)}  ${import_picocolors.default.reset(n)} ${import_picocolors.default.gray(N2.repeat(Math.max(r2 - i - 1, 1)) + re)}
+  process.stdout.write(`${import_picocolors2.default.gray(a)}
+${import_picocolors2.default.green(S2)}  ${import_picocolors2.default.reset(n)} ${import_picocolors2.default.gray(N2.repeat(Math.max(r2 - i - 1, 1)) + re)}
 ${c2}
-${import_picocolors.default.gray(ie + N2.repeat(r2 + 2) + ne)}
+${import_picocolors2.default.gray(ie + N2.repeat(r2 + 2) + ne)}
 `);
 };
 var ve = (s = "") => {
-  process.stdout.write(`${import_picocolors.default.gray(m2)}  ${import_picocolors.default.red(s)}
+  process.stdout.write(`${import_picocolors2.default.gray(m2)}  ${import_picocolors2.default.red(s)}
 
 `);
 };
 var we = (s = "") => {
-  process.stdout.write(`${import_picocolors.default.gray(te)}  ${s}
+  process.stdout.write(`${import_picocolors2.default.gray(te)}  ${s}
 `);
 };
 var fe = (s = "") => {
-  process.stdout.write(`${import_picocolors.default.gray(a)}
-${import_picocolors.default.gray(m2)}  ${s}
+  process.stdout.write(`${import_picocolors2.default.gray(a)}
+${import_picocolors2.default.gray(m2)}  ${s}
 
 `);
 };
-var v2 = { message: (s = "", { symbol: n = import_picocolors.default.gray(a) } = {}) => {
-  const t = [`${import_picocolors.default.gray(a)}`];
+var v2 = { message: (s = "", { symbol: n = import_picocolors2.default.gray(a) } = {}) => {
+  const t = [`${import_picocolors2.default.gray(a)}`];
   if (s) {
     const [i, ...r2] = s.split(`
 `);
-    t.push(`${n}  ${i}`, ...r2.map((c2) => `${import_picocolors.default.gray(a)}  ${c2}`));
+    t.push(`${n}  ${i}`, ...r2.map((c2) => `${import_picocolors2.default.gray(a)}  ${c2}`));
   }
   process.stdout.write(`${t.join(`
 `)}
 `);
 }, info: (s) => {
-  v2.message(s, { symbol: import_picocolors.default.blue(ae) });
+  v2.message(s, { symbol: import_picocolors2.default.blue(ae) });
 }, success: (s) => {
-  v2.message(s, { symbol: import_picocolors.default.green(oe) });
+  v2.message(s, { symbol: import_picocolors2.default.green(oe) });
 }, step: (s) => {
-  v2.message(s, { symbol: import_picocolors.default.green(S2) });
+  v2.message(s, { symbol: import_picocolors2.default.green(S2) });
 }, warn: (s) => {
-  v2.message(s, { symbol: import_picocolors.default.yellow(ce) });
+  v2.message(s, { symbol: import_picocolors2.default.yellow(ce) });
 }, warning: (s) => {
   v2.warn(s);
 }, error: (s) => {
-  v2.message(s, { symbol: import_picocolors.default.red(le) });
+  v2.message(s, { symbol: import_picocolors2.default.red(le) });
 } };
 var L2 = () => {
   const s = E ? ["\u25D2", "\u25D0", "\u25D3", "\u25D1"] : ["\u2022", "o", "O", "0"], n = E ? 80 : 120, t = process.env.CI === "true";
   let i, r2, c2 = false, o = "", l2;
   const $2 = (h2) => {
-    const g = h2 > 1 ? "Something went wrong" : "Canceled";
-    c2 && P2(g, h2);
+    const g2 = h2 > 1 ? "Something went wrong" : "Canceled";
+    c2 && P2(g2, h2);
   }, d2 = () => $2(2), w2 = () => $2(1), b2 = () => {
     process.on("uncaughtExceptionMonitor", d2), process.on("unhandledRejection", d2), process.on("SIGINT", w2), process.on("SIGTERM", w2), process.on("exit", $2);
   }, C = () => {
@@ -808,19 +848,19 @@ var L2 = () => {
 `);
     process.stdout.write(import_sisteransi2.cursor.move(-999, h2.length - 1)), process.stdout.write(import_sisteransi2.erase.down(h2.length));
   }, x2 = (h2) => h2.replace(/\.+$/, ""), O2 = (h2 = "") => {
-    c2 = true, i = cD(), o = x2(h2), process.stdout.write(`${import_picocolors.default.gray(a)}
+    c2 = true, i = cD(), o = x2(h2), process.stdout.write(`${import_picocolors2.default.gray(a)}
 `);
-    let g = 0, f2 = 0;
+    let g2 = 0, f2 = 0;
     b2(), r2 = setInterval(() => {
       if (t && o === l2)
         return;
       I2(), l2 = o;
-      const W2 = import_picocolors.default.magenta(s[g]), _2 = t ? "..." : ".".repeat(Math.floor(f2)).slice(0, 3);
-      process.stdout.write(`${W2}  ${o}${_2}`), g = g + 1 < s.length ? g + 1 : 0, f2 = f2 < s.length ? f2 + 0.125 : 0;
+      const W2 = import_picocolors2.default.magenta(s[g2]), _2 = t ? "..." : ".".repeat(Math.floor(f2)).slice(0, 3);
+      process.stdout.write(`${W2}  ${o}${_2}`), g2 = g2 + 1 < s.length ? g2 + 1 : 0, f2 = f2 < s.length ? f2 + 0.125 : 0;
     }, n);
-  }, P2 = (h2 = "", g = 0) => {
+  }, P2 = (h2 = "", g2 = 0) => {
     c2 = false, clearInterval(r2), I2();
-    const f2 = g === 0 ? import_picocolors.default.green(S2) : g === 1 ? import_picocolors.default.red(A2) : import_picocolors.default.red(B);
+    const f2 = g2 === 0 ? import_picocolors2.default.green(S2) : g2 === 1 ? import_picocolors2.default.red(A2) : import_picocolors2.default.red(B);
     o = x2(h2 ?? o), process.stdout.write(`${f2}  ${o}
 `), C(), i();
   };
@@ -830,7 +870,7 @@ var L2 = () => {
 };
 
 // src/index.ts
-var import_picocolors2 = __toESM(require_picocolors(), 1);
+var import_picocolors3 = __toESM(require_picocolors(), 1);
 var TEMPLATES_DIR = join(import.meta.dir, "..", "templates");
 var MCP_CATEGORIES = [
   {
@@ -951,6 +991,16 @@ var MCP_CATEGORIES = [
     ]
   }
 ];
+var AGENT_MODEL_CATEGORIES = {
+  thinking: ["plan", "oracle", "reviewer"],
+  coding: ["coder", "frontend", "build"],
+  fast: ["explore", "researcher", "scribe"]
+};
+var DEFAULT_AGENT_MODELS = {
+  thinking: null,
+  coding: null,
+  fast: null
+};
 async function copyDir(src, dest) {
   let count = 0;
   await mkdir(dest, { recursive: true });
@@ -1004,7 +1054,7 @@ async function backupConfig(configDir) {
     return null;
   }
 }
-function mergeConfig(existing, selectedMcps, pluginChoices) {
+function mergeConfig(existing, selectedMcps, pluginChoices, agentModels) {
   const base = existing || {
     $schema: "https://opencode.ai/config.json"
   };
@@ -1069,7 +1119,7 @@ function mergeConfig(existing, selectedMcps, pluginChoices) {
   }
   for (const [agentName, tools] of Object.entries(agentTools)) {
     if (!base.agent[agentName]) {
-      base.agent[agentName] = { tools: {} };
+      base.agent[agentName] = {};
     }
     if (!base.agent[agentName].tools) {
       base.agent[agentName].tools = {};
@@ -1080,6 +1130,20 @@ function mergeConfig(existing, selectedMcps, pluginChoices) {
       }
     }
   }
+  for (const [category, agents] of Object.entries(AGENT_MODEL_CATEGORIES)) {
+    const modelKey = category;
+    const model = agentModels[modelKey];
+    if (model) {
+      for (const agentName of agents) {
+        if (!base.agent[agentName]) {
+          base.agent[agentName] = {};
+        }
+        if (!base.agent[agentName].model) {
+          base.agent[agentName].model = model;
+        }
+      }
+    }
+  }
   if (!base.compaction) {
     base.compaction = { auto: true, prune: true };
   }
@@ -1087,7 +1151,7 @@ function mergeConfig(existing, selectedMcps, pluginChoices) {
 }
 async function main() {
   console.clear();
-  we(`${import_picocolors2.default.bgCyan(import_picocolors2.default.black(" op1 "))} ${import_picocolors2.default.dim("OpenCode harness installer")}`);
+  we(`${import_picocolors3.default.bgCyan(import_picocolors3.default.black(" op1 "))} ${import_picocolors3.default.dim("OpenCode harness installer")}`);
   const homeDir = homedir();
   const globalConfigDir = join(homeDir, ".config", "opencode");
   const globalConfigFile = join(globalConfigDir, "opencode.json");
@@ -1100,9 +1164,9 @@ async function main() {
   const hasMalformedConfig = configFileResult.error === "parse_error";
   if (configDirExists) {
     if (hasMalformedConfig) {
-      v2.error(`${import_picocolors2.default.red("Malformed config")} at ${import_picocolors2.default.dim(globalConfigFile)}`);
+      v2.error(`${import_picocolors3.default.red("Malformed config")} at ${import_picocolors3.default.dim(globalConfigFile)}`);
       if (configFileResult.rawError) {
-        v2.error(`  ${import_picocolors2.default.dim(configFileResult.rawError.message)}`);
+        v2.error(`  ${import_picocolors3.default.dim(configFileResult.rawError.message)}`);
       }
       const action = await de({
         message: "Your opencode.json has syntax errors. How would you like to proceed?",
@@ -1125,11 +1189,11 @@ async function main() {
       }
       backupPath = await backupConfig(globalConfigDir);
       if (backupPath) {
-        v2.success(`Backup created at ${import_picocolors2.default.dim(backupPath)}`);
+        v2.success(`Backup created at ${import_picocolors3.default.dim(backupPath)}`);
       }
       existingJson = null;
     } else if (hasValidConfig) {
-      v2.info(`${import_picocolors2.default.yellow("Found existing config")} at ${import_picocolors2.default.dim(globalConfigDir)}`);
+      v2.info(`${import_picocolors3.default.yellow("Found existing config")} at ${import_picocolors3.default.dim(globalConfigDir)}`);
       const action = await de({
         message: "How would you like to proceed?",
         options: [
@@ -1156,7 +1220,7 @@ async function main() {
       }
       backupPath = await backupConfig(globalConfigDir);
       if (backupPath) {
-        v2.success(`Backup created at ${import_picocolors2.default.dim(backupPath)}`);
+        v2.success(`Backup created at ${import_picocolors3.default.dim(backupPath)}`);
       }
       if (action === "merge") {
         existingJson = configFileResult.data;
@@ -1164,7 +1228,7 @@ async function main() {
         existingJson = null;
       }
     } else if (!hasConfigFile) {
-      v2.info(`${import_picocolors2.default.yellow("Found config directory")} at ${import_picocolors2.default.dim(globalConfigDir)} (no opencode.json)`);
+      v2.info(`${import_picocolors3.default.yellow("Found config directory")} at ${import_picocolors3.default.dim(globalConfigDir)} (no opencode.json)`);
       const shouldContinue = await me({
         message: "Add op1 configuration to this directory?",
         initialValue: true
@@ -1240,7 +1304,7 @@ async function main() {
     }
   }
   v2.info(`
-${import_picocolors2.default.bold("MCP Server Configuration")}`);
+${import_picocolors3.default.bold("MCP Server Configuration")}`);
   const selectedCategories = await pe({
     message: "Which MCP categories do you want to enable?",
     options: MCP_CATEGORIES.map((cat) => ({
@@ -1263,7 +1327,7 @@ ${import_picocolors2.default.bold("MCP Server Configuration")}`);
     if (category.requiresEnvVar) {
       const hasEnvVar = process.env[category.requiresEnvVar];
       if (!hasEnvVar) {
-        v2.warn(`${import_picocolors2.default.yellow(category.name)} requires ${import_picocolors2.default.cyan(category.requiresEnvVar)} environment variable`);
+        v2.warn(`${import_picocolors3.default.yellow(category.name)} requires ${import_picocolors3.default.cyan(category.requiresEnvVar)} environment variable`);
       }
     }
     const mcpSelection = await pe({
@@ -1281,6 +1345,42 @@ ${import_picocolors2.default.bold("MCP Server Configuration")}`);
         const mcp = category.mcps.find((m3) => m3.id === mcpId);
         if (mcp)
           selectedMcps.push(mcp);
+      }
+    }
+  }
+  let agentModels = { ...DEFAULT_AGENT_MODELS };
+  if (options.agents) {
+    v2.info(`
+${import_picocolors3.default.bold("Agent Model Configuration")}`);
+    v2.info(import_picocolors3.default.dim("Models are stored in opencode.json, preserved across updates."));
+    const configureModels = await me({
+      message: "Configure per-agent models? (Skip to use global default)",
+      initialValue: false
+    });
+    if (!BD(configureModels) && configureModels) {
+      const thinkingModel = await ue({
+        message: "Model for thinking agents (plan, oracle, reviewer):",
+        placeholder: "anthropic/claude-sonnet-4-20250514 or leave empty for global",
+        defaultValue: ""
+      });
+      if (!BD(thinkingModel) && thinkingModel.trim()) {
+        agentModels.thinking = thinkingModel.trim();
+      }
+      const codingModel = await ue({
+        message: "Model for coding agents (coder, frontend, build):",
+        placeholder: "anthropic/claude-sonnet-4-20250514 or leave empty for global",
+        defaultValue: ""
+      });
+      if (!BD(codingModel) && codingModel.trim()) {
+        agentModels.coding = codingModel.trim();
+      }
+      const fastModel = await ue({
+        message: "Model for fast agents (explore, researcher, scribe):",
+        placeholder: "anthropic/claude-haiku-3-5-20241022 or leave empty for global",
+        defaultValue: ""
+      });
+      if (!BD(fastModel) && fastModel.trim()) {
+        agentModels.fast = fastModel.trim();
       }
     }
   }
@@ -1310,7 +1410,7 @@ ${import_picocolors2.default.bold("MCP Server Configuration")}`);
         totalFiles += await copyDir(src, dest);
       }
     }
-    const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices);
+    const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices, agentModels);
     await writeJsonFile(globalConfigFile, mergedConfig);
     totalFiles++;
     if (options.plugins && (pluginChoices.notify || pluginChoices.workspace)) {
@@ -1338,33 +1438,33 @@ They are already configured in your opencode.json.
   }
   const summaryLines = [];
   if (backupPath) {
-    summaryLines.push(`${import_picocolors2.default.blue("\u21A9")} Backup at ${import_picocolors2.default.dim(backupPath)}`);
+    summaryLines.push(`${import_picocolors3.default.blue("\u21A9")} Backup at ${import_picocolors3.default.dim(backupPath)}`);
   }
   if (options.agents) {
-    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Agents installed to ${import_picocolors2.default.dim("~/.config/opencode/agent/")}`);
+    summaryLines.push(`${import_picocolors3.default.green("\u2713")} Agents installed to ${import_picocolors3.default.dim("~/.config/opencode/agent/")}`);
   }
   if (options.commands) {
-    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Commands installed to ${import_picocolors2.default.dim("~/.config/opencode/command/")}`);
+    summaryLines.push(`${import_picocolors3.default.green("\u2713")} Commands installed to ${import_picocolors3.default.dim("~/.config/opencode/command/")}`);
   }
   if (options.skills) {
-    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Skills installed to ${import_picocolors2.default.dim("~/.config/opencode/skill/")}`);
+    summaryLines.push(`${import_picocolors3.default.green("\u2713")} Skills installed to ${import_picocolors3.default.dim("~/.config/opencode/skill/")}`);
   }
   if (options.plugins) {
-    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Plugins configured in opencode.json`);
+    summaryLines.push(`${import_picocolors3.default.green("\u2713")} Plugins configured in opencode.json`);
   }
   if (selectedMcps.length > 0) {
-    summaryLines.push(`${import_picocolors2.default.green("\u2713")} MCPs configured: ${selectedMcps.map((m3) => import_picocolors2.default.cyan(m3.name)).join(", ")}`);
+    summaryLines.push(`${import_picocolors3.default.green("\u2713")} MCPs configured: ${selectedMcps.map((m3) => import_picocolors3.default.cyan(m3.name)).join(", ")}`);
   }
   ye(summaryLines.join(`
 `), "Installation complete");
   const missingEnvVars = MCP_CATEGORIES.filter((c2) => selectedCategories.includes(c2.id) && c2.requiresEnvVar).filter((c2) => !process.env[c2.requiresEnvVar]).map((c2) => c2.requiresEnvVar);
   if (missingEnvVars.length > 0) {
     v2.warn(`
-${import_picocolors2.default.yellow("\u26A0")} Set these environment variables for full functionality:
-` + missingEnvVars.map((v3) => `  ${import_picocolors2.default.cyan(v3)}`).join(`
+${import_picocolors3.default.yellow("\u26A0")} Set these environment variables for full functionality:
+` + missingEnvVars.map((v3) => `  ${import_picocolors3.default.cyan(v3)}`).join(`
 `));
   }
-  fe(`Run ${import_picocolors2.default.cyan("opencode")} to start coding with op1!`);
+  fe(`Run ${import_picocolors3.default.cyan("opencode")} to start coding with op1!`);
 }
 
 // bin/cli.ts

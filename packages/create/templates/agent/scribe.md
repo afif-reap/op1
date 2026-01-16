@@ -1,7 +1,6 @@
 ---
 description: Human-facing content specialist for documentation and prose
 mode: subagent
-model: zai-coding-plan/glm-4.5-flash
 temperature: 0.3
 permission:
   bash: deny

@@ -1,7 +1,6 @@
 ---
 description: External resource researcher - docs, GitHub, web search, Notion, Linear
 mode: subagent
-model: zai-coding-plan/glm-4.7
 temperature: 0.1
 permission:
   edit: deny

@@ -1,7 +1,6 @@
 ---
 description: Strategic planning agent - creates detailed work breakdowns
 mode: primary
-model: quotio/gemini-claude-opus-4-5-thinking
 color: "#FFD700"
 ---
 

@@ -1,7 +1,6 @@
 ---
 description: Frontend specialist - UI/UX implementation with visual excellence
 mode: subagent
-model: quotio/gemini-3-pro-preview
 temperature: 0.3
 color: "#FF6B9D"
 ---
