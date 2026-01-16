@@ -14,11 +14,12 @@
  * - Per-event sounds
  * - Idle confirmation delay (prevents false positives)
  * - Parent session only by default (no spam from sub-tasks)
+ *
+ * Uses Bun-native APIs exclusively (no node: imports).
  */
 
-import * as fs from "node:fs/promises"
-import * as os from "node:os"
-import * as path from "node:path"
+import { join } from "path"
+import { homedir } from "os"
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 
 // ==========================================
@@ -127,14 +128,17 @@ function detectPlatform(): Platform {
 async function loadConfig(projectDir: string): Promise<NotifyConfig> {
 	// Try project-local config first, then global config
 	const configPaths = [
-		path.join(projectDir, "notify.json"),
-		path.join(projectDir, ".opencode", "notify.json"),
-		path.join(os.homedir(), ".config", "opencode", "notify.json"),
+		join(projectDir, "notify.json"),
+		join(projectDir, ".opencode", "notify.json"),
+		join(homedir(), ".config", "opencode", "notify.json"),
 	]
 
 	for (const configPath of configPaths) {
 		try {
-			const content = await fs.readFile(configPath, "utf8")
+			const file = Bun.file(configPath)
+			if (!(await file.exists())) continue
+			
+			const content = await file.text()
 			const userConfig = JSON.parse(content) as Partial<NotifyConfig>
 
 			return {

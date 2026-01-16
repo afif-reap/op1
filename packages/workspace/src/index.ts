@@ -1,12 +1,15 @@
-import { execFile } from "node:child_process";
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
-import { promisify } from "node:util";
+/**
+ * Workspace Plugin
+ *
+ * Plan management, notepads, verification hooks.
+ * Uses Bun-native APIs exclusively (no node: imports).
+ */
+
+import { mkdir, readdir, stat } from "fs/promises";
+import { join, basename, relative } from "path";
+import { homedir } from "os";
 import { type Plugin, tool } from "@opencode-ai/plugin";
 import { z } from "zod";
-
-const execFileAsync = promisify(execFile);
 
 // ==========================================
 // VERIFICATION HOOKS
@@ -18,25 +21,34 @@ const execFileAsync = promisify(execFile);
 const IMPLEMENTER_AGENTS = ["coder", "frontend", "build"] as const;
 
 /**
+ * Run a command and get stdout using Bun.spawn
+ */
+async function runCommand(cmd: string[], cwd: string): Promise<string> {
+	const proc = Bun.spawn(cmd, {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const output = await new Response(proc.stdout).text();
+	await proc.exited;
+	return output;
+}
+
+/**
  * Get git diff stats to show what files were changed
  */
 async function getGitDiffStats(directory: string): Promise<string> {
 	try {
-		const { stdout } = await execFileAsync(
-			"git",
-			["diff", "--numstat", "HEAD"],
-			{
-				cwd: directory,
-				encoding: "utf8",
-			},
+		const stdout = await runCommand(
+			["git", "diff", "--numstat", "HEAD"],
+			directory,
 		);
 
 		if (!stdout.trim()) {
 			// Check for staged changes
-			const { stdout: stagedOutput } = await execFileAsync(
-				"git",
-				["diff", "--numstat", "--cached"],
-				{ cwd: directory, encoding: "utf8" },
+			const stagedOutput = await runCommand(
+				["git", "diff", "--numstat", "--cached"],
+				directory,
 			);
 			if (!stagedOutput.trim()) {
 				return "No file changes detected.";
@@ -122,23 +134,16 @@ ${fileChanges}
  */
 async function getProjectId(directory: string): Promise<string> {
 	try {
-		const { stdout } = await execFileAsync(
-			"git",
-			["rev-list", "--max-parents=0", "HEAD"],
-			{
-				cwd: directory,
-				encoding: "utf8",
-			},
+		const stdout = await runCommand(
+			["git", "rev-list", "--max-parents=0", "HEAD"],
+			directory,
 		);
 		return stdout.trim().slice(0, 12);
 	} catch {
 		// Fallback to directory hash if not a git repo
-		const hash = await import("node:crypto");
-		return hash
-			.createHash("sha256")
-			.update(directory)
-			.digest("hex")
-			.slice(0, 12);
+		const hasher = new Bun.CryptoHasher("sha256");
+		hasher.update(directory);
+		return hasher.digest("hex").slice(0, 12);
 	}
 }
 
@@ -366,7 +371,8 @@ ${error}
 💡 ${hint}`;
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+// Bun-compatible error type guard for filesystem errors
+function isSystemError(error: unknown): error is Error & { code: string } {
 	return error instanceof Error && "code" in error;
 }
 
@@ -459,11 +465,11 @@ function generatePlanPath(plansDir: string): string {
 	const timestamp = Date.now();
 	const slug = generateSlug();
 	const filename = `${timestamp}-${slug}.md`;
-	return path.join(plansDir, filename);
+	return join(plansDir, filename);
 }
 
 function getPlanName(planPath: string): string {
-	return path.basename(planPath, ".md");
+	return basename(planPath, ".md");
 }
 
 export const WorkspacePlugin: Plugin = async (ctx) => {
@@ -472,8 +478,8 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 	const projectId = await getProjectId(directory);
 
 	// Legacy session-scoped directory (for migration fallback)
-	const legacyBaseDir = path.join(
-		os.homedir(),
+	const legacyBaseDir = join(
+		homedir(),
 		".local",
 		"share",
 		"opencode",
@@ -482,10 +488,10 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 	);
 
 	// New project-scoped directories
-	const workspaceDir = path.join(directory, ".opencode", "workspace");
-	const plansDir = path.join(workspaceDir, "plans");
-	const notepadsDir = path.join(workspaceDir, "notepads");
-	const activePlanPath = path.join(workspaceDir, "active-plan.json");
+	const workspaceDir = join(directory, ".opencode", "workspace");
+	const plansDir = join(workspaceDir, "plans");
+	const notepadsDir = join(workspaceDir, "notepads");
+	const activePlanPath = join(workspaceDir, "active-plan.json");
 
 	// Notepad file types
 	const NOTEPAD_FILES = ["learnings.md", "issues.md", "decisions.md"] as const;
@@ -516,17 +522,19 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 
 	async function readActivePlanState(): Promise<ActivePlanState | null> {
 		try {
-			const content = await fs.readFile(activePlanPath, "utf8");
+			const file = Bun.file(activePlanPath);
+			if (!(await file.exists())) return null;
+			const content = await file.text();
 			return JSON.parse(content) as ActivePlanState;
 		} catch (error) {
-			if (isNodeError(error) && error.code === "ENOENT") return null;
+			if (isSystemError(error) && error.code === "ENOENT") return null;
 			throw error;
 		}
 	}
 
 	async function writeActivePlanState(state: ActivePlanState): Promise<void> {
-		await fs.mkdir(workspaceDir, { recursive: true });
-		await fs.writeFile(activePlanPath, JSON.stringify(state, null, 2), "utf8");
+		await mkdir(workspaceDir, { recursive: true });
+		await Bun.write(activePlanPath, JSON.stringify(state, null, 2));
 	}
 
 	async function appendSessionToActivePlan(sessionID: string): Promise<void> {
@@ -546,13 +554,13 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 	async function getNotepadDir(): Promise<string | null> {
 		const activePlan = await readActivePlanState();
 		if (!activePlan) return null;
-		return path.join(notepadsDir, activePlan.plan_name);
+		return join(notepadsDir, activePlan.plan_name);
 	}
 
 	async function ensureNotepadDir(): Promise<string | null> {
 		const notepadDir = await getNotepadDir();
 		if (!notepadDir) return null;
-		await fs.mkdir(notepadDir, { recursive: true });
+		await mkdir(notepadDir, { recursive: true });
 		return notepadDir;
 	}
 
@@ -561,9 +569,12 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 		if (!notepadDir) return null;
 
 		try {
-			return await fs.readFile(path.join(notepadDir, file), "utf8");
+			const filePath = join(notepadDir, file);
+			const bunFile = Bun.file(filePath);
+			if (!(await bunFile.exists())) return null;
+			return await bunFile.text();
 		} catch (error) {
-			if (isNodeError(error) && error.code === "ENOENT") return null;
+			if (isSystemError(error) && error.code === "ENOENT") return null;
 			throw error;
 		}
 	}
@@ -576,20 +587,18 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 		if (!notepadDir)
 			throw new Error("No active plan. Create a plan first with /plan.");
 
-		const filePath = path.join(notepadDir, file);
+		const filePath = join(notepadDir, file);
 		const timestamp = new Date().toISOString().slice(0, 10);
 		const entry = `\n## ${timestamp}\n${content.trim()}\n`;
 
-		try {
-			await fs.appendFile(filePath, entry, "utf8");
-		} catch (error) {
-			if (isNodeError(error) && error.code === "ENOENT") {
-				// Create file with header
-				const header = `# ${file.replace(".md", "").charAt(0).toUpperCase() + file.replace(".md", "").slice(1)}\n`;
-				await fs.writeFile(filePath, header + entry, "utf8");
-			} else {
-				throw error;
-			}
+		const bunFile = Bun.file(filePath);
+		if (await bunFile.exists()) {
+			const existing = await bunFile.text();
+			await Bun.write(filePath, existing + entry);
+		} else {
+			// Create file with header
+			const header = `# ${file.replace(".md", "").charAt(0).toUpperCase() + file.replace(".md", "").slice(1)}\n`;
+			await Bun.write(filePath, header + entry);
 		}
 	}
 
@@ -624,29 +633,29 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 							existingState.session_ids.push(toolCtx.sessionID);
 							await writeActivePlanState(existingState);
 						}
-					} else {
-						await fs.mkdir(plansDir, { recursive: true });
-						planPath = generatePlanPath(plansDir);
-						isNewPlan = true;
+						} else {
+							await mkdir(plansDir, { recursive: true });
+							planPath = generatePlanPath(plansDir);
+							isNewPlan = true;
 
-						const state: ActivePlanState = {
-							active_plan: planPath,
-							started_at: new Date().toISOString(),
-							session_ids: [toolCtx.sessionID],
-							plan_name: getPlanName(planPath),
-						};
-						await writeActivePlanState(state);
-					}
+							const state: ActivePlanState = {
+								active_plan: planPath,
+								started_at: new Date().toISOString(),
+								session_ids: [toolCtx.sessionID],
+								plan_name: getPlanName(planPath),
+							};
+							await writeActivePlanState(state);
+						}
 
-					await fs.writeFile(planPath, args.content, "utf8");
+						await Bun.write(planPath, args.content);
 
 					const warningCount = result.warnings?.length ?? 0;
 					const warningText =
 						warningCount > 0
 							? ` (${warningCount} warnings: ${result.warnings?.join(", ")})`
-							: "";
+					: "";
 
-					const relativePath = path.relative(directory, planPath);
+				const relativePath = relative(directory, planPath);
 					const action = isNewPlan ? "created" : "updated";
 
 					return `Plan ${action} at ${relativePath}.${warningText}`;
@@ -668,26 +677,34 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 					// 1. Try project-scoped active plan first
 					const activePlan = await readActivePlanState();
 					if (activePlan) {
-						await appendSessionToActivePlan(toolCtx.sessionID);
+					await appendSessionToActivePlan(toolCtx.sessionID);
 
-						try {
-							return await fs.readFile(activePlan.active_plan, "utf8");
-						} catch (error) {
-							if (isNodeError(error) && error.code === "ENOENT") {
-								return `❌ Active plan file not found at ${activePlan.active_plan}. The plan may have been deleted.`;
-							}
-							throw error;
-						}
-					}
-
-					// 2. Fall back to legacy session-scoped plan
-					const rootID = await getRootSessionID(toolCtx.sessionID);
-					const legacyPlanPath = path.join(legacyBaseDir, rootID, "plan.md");
 					try {
-						const content = await fs.readFile(legacyPlanPath, "utf8");
-						return `${content}\n\n---\n<migration-notice>\nThis plan is from the legacy session-scoped storage. Next time you save, it will be migrated to project-scoped storage at .opencode/workspace/plans/\n</migration-notice>`;
+						const planFile = Bun.file(activePlan.active_plan);
+						if (!(await planFile.exists())) {
+							return `❌ Active plan file not found at ${activePlan.active_plan}. The plan may have been deleted.`;
+						}
+						return await planFile.text();
 					} catch (error) {
-						if (isNodeError(error) && error.code === "ENOENT") {
+						if (isSystemError(error) && error.code === "ENOENT") {
+							return `❌ Active plan file not found at ${activePlan.active_plan}. The plan may have been deleted.`;
+						}
+						throw error;
+					}
+				}
+
+				// 2. Fall back to legacy session-scoped plan
+				const rootID = await getRootSessionID(toolCtx.sessionID);
+				const legacyPlanPath = join(legacyBaseDir, rootID, "plan.md");
+				try {
+					const legacyFile = Bun.file(legacyPlanPath);
+					if (!(await legacyFile.exists())) {
+						return "No plan found. Use /plan to create a new plan.";
+					}
+					const content = await legacyFile.text();
+					return `${content}\n\n---\n<migration-notice>\nThis plan is from the legacy session-scoped storage. Next time you save, it will be migrated to project-scoped storage at .opencode/workspace/plans/\n</migration-notice>`;
+					} catch (error) {
+						if (isSystemError(error) && error.code === "ENOENT") {
 							return "No plan found. Use /plan to create a new plan.";
 						}
 						throw error;
@@ -706,18 +723,18 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 
 					const activePlan = await readActivePlanState();
 
-					let allPlans: string[] = [];
-					try {
-						await fs.mkdir(plansDir, { recursive: true });
-						const files = await fs.readdir(plansDir);
-						allPlans = files
-							.filter((f) => f.endsWith(".md"))
-							.map((f) => path.join(plansDir, f))
-							.sort()
-							.reverse(); // Newest first
-					} catch (error) {
-						if (!isNodeError(error) || error.code !== "ENOENT") throw error;
-					}
+				let allPlans: string[] = [];
+				try {
+					await mkdir(plansDir, { recursive: true });
+					const files = await readdir(plansDir);
+					allPlans = files
+						.filter((f) => f.endsWith(".md"))
+						.map((f) => join(plansDir, f))
+						.sort()
+						.reverse(); // Newest first
+				} catch (error) {
+					if (!isSystemError(error) || error.code !== "ENOENT") throw error;
+				}
 
 					if (allPlans.length === 0) {
 						return "No plans found in .opencode/workspace/plans/. Use /plan to create one.";
@@ -726,27 +743,27 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 					const planList: string[] = [];
 
 					if (activePlan) {
-						planList.push(`## Active Plan\n`);
-						planList.push(`**Name**: ${activePlan.plan_name}`);
-						planList.push(
-							`**Path**: ${path.relative(directory, activePlan.active_plan)}`,
-						);
-						planList.push(`**Started**: ${activePlan.started_at}`);
-						planList.push(
-							`**Sessions**: ${activePlan.session_ids.length} session(s) have worked on this plan`,
-						);
-						planList.push(``);
-					}
-
-					const otherPlans = allPlans.filter(
-						(p) => p !== activePlan?.active_plan,
+					planList.push(`## Active Plan\n`);
+					planList.push(`**Name**: ${activePlan.plan_name}`);
+					planList.push(
+						`**Path**: ${relative(directory, activePlan.active_plan)}`,
 					);
-					if (otherPlans.length > 0) {
-						planList.push(`## Other Plans (${otherPlans.length})`);
-						for (const planPath of otherPlans) {
-							const stats = await fs.stat(planPath);
-							const name = getPlanName(planPath);
-							const relativePath = path.relative(directory, planPath);
+					planList.push(`**Started**: ${activePlan.started_at}`);
+					planList.push(
+						`**Sessions**: ${activePlan.session_ids.length} session(s) have worked on this plan`,
+					);
+					planList.push(``);
+				}
+
+				const otherPlans = allPlans.filter(
+					(p) => p !== activePlan?.active_plan,
+				);
+				if (otherPlans.length > 0) {
+					planList.push(`## Other Plans (${otherPlans.length})`);
+					for (const planPath of otherPlans) {
+						const stats = await stat(planPath);
+						const name = getPlanName(planPath);
+						const relativePath = relative(directory, planPath);
 							planList.push(
 								`- **${name}**: ${relativePath} (modified: ${stats.mtime.toISOString()})`,
 							);
@@ -821,57 +838,62 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 				},
 				async execute(args) {
 					try {
-						await appendToNotepadFile(
-							`${args.file}.md` as NotepadFile,
-							args.content,
-						);
-						const notepadDir = await getNotepadDir();
-						const relativePath = path.relative(directory, notepadDir!);
-						return `✅ Appended to ${relativePath}/${args.file}.md`;
-					} catch (error) {
-						if (error instanceof Error) {
-							return `❌ ${error.message}`;
-						}
-						throw error;
-					}
-				},
-			}),
-
-			notepad_list: tool({
-				description:
-					"List all notepad files for the active plan with their sizes.",
-				args: {},
-				async execute() {
+					await appendToNotepadFile(
+						`${args.file}.md` as NotepadFile,
+						args.content,
+					);
 					const notepadDir = await getNotepadDir();
-					if (!notepadDir) {
-						return "No active plan. Create a plan first with /plan.";
+					const relativePath = relative(directory, notepadDir!);
+					return `✅ Appended to ${relativePath}/${args.file}.md`;
+				} catch (error) {
+					if (error instanceof Error) {
+						return `❌ ${error.message}`;
 					}
+					throw error;
+				}
+			},
+		}),
 
-					const activePlan = await readActivePlanState();
-					const results: string[] = [
-						`## Notepad for "${activePlan?.plan_name}"\n`,
-					];
-					results.push(`Path: ${path.relative(directory, notepadDir)}/\n`);
+		notepad_list: tool({
+			description:
+				"List all notepad files for the active plan with their sizes.",
+			args: {},
+			async execute() {
+				const notepadDir = await getNotepadDir();
+				if (!notepadDir) {
+					return "No active plan. Create a plan first with /plan.";
+				}
 
-					let hasFiles = false;
-					for (const file of NOTEPAD_FILES) {
-						try {
-							const filePath = path.join(notepadDir, file);
-							const stats = await fs.stat(filePath);
-							const content = await fs.readFile(filePath, "utf8");
-							const lineCount = content.split("\n").length;
-							results.push(
-								`- **${file}**: ${lineCount} lines, ${stats.size} bytes`,
-							);
-							hasFiles = true;
-						} catch (error) {
-							if (isNodeError(error) && error.code === "ENOENT") {
-								results.push(`- **${file}**: (not created)`);
-							} else {
-								throw error;
-							}
+				const activePlan = await readActivePlanState();
+				const results: string[] = [
+					`## Notepad for "${activePlan?.plan_name}"\n`,
+				];
+				results.push(`Path: ${relative(directory, notepadDir)}/\n`);
+
+				let hasFiles = false;
+				for (const file of NOTEPAD_FILES) {
+					try {
+						const filePath = join(notepadDir, file);
+						const bunFile = Bun.file(filePath);
+						if (!(await bunFile.exists())) {
+							results.push(`- **${file}**: (not created)`);
+							continue;
+						}
+						const stats = await stat(filePath);
+						const content = await bunFile.text();
+						const lineCount = content.split("\n").length;
+						results.push(
+							`- **${file}**: ${lineCount} lines, ${stats.size} bytes`,
+						);
+						hasFiles = true;
+					} catch (error) {
+						if (isSystemError(error) && error.code === "ENOENT") {
+							results.push(`- **${file}**: (not created)`);
+						} else {
+							throw error;
 						}
 					}
+				}
 
 					if (!hasFiles) {
 						results.push(

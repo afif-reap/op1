@@ -147,8 +147,9 @@ var require_picocolors = __commonJS((exports, module) => {
 });
 
 // src/index.ts
-import * as fs from "fs/promises";
-import * as path from "path";
+import { mkdir, readdir } from "fs/promises";
+import { join } from "path";
+import { homedir } from "os";
 
 // ../../node_modules/.bun/@clack+prompts@0.9.1/node_modules/@clack/prompts/dist/index.mjs
 import { stripVTControlCharacters as T2 } from "util";
@@ -562,6 +563,33 @@ var wD = class extends x {
     this.value = u ? this.value.filter((F) => F !== this._value) : [...this.value, this._value];
   }
 };
+var SD = Object.defineProperty;
+var $D = (t, u, F) => (u in t) ? SD(t, u, { enumerable: true, configurable: true, writable: true, value: F }) : t[u] = F;
+var q = (t, u, F) => ($D(t, typeof u != "symbol" ? u + "" : u, F), F);
+
+class jD extends x {
+  constructor(u) {
+    super(u, false), q(this, "options"), q(this, "cursor", 0), this.options = u.options, this.cursor = this.options.findIndex(({ value: F }) => F === u.initialValue), this.cursor === -1 && (this.cursor = 0), this.changeValue(), this.on("cursor", (F) => {
+      switch (F) {
+        case "left":
+        case "up":
+          this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1;
+          break;
+        case "down":
+        case "right":
+          this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1;
+          break;
+      }
+      this.changeValue();
+    });
+  }
+  get _value() {
+    return this.options[this.cursor];
+  }
+  changeValue() {
+    this.value = this._value.value;
+  }
+}
 
 // ../../node_modules/.bun/@clack+prompts@0.9.1/node_modules/@clack/prompts/dist/index.mjs
 var import_picocolors = __toESM(require_picocolors(), 1);
@@ -630,6 +658,38 @@ ${y2(this.state)}  ${s.message}
 ${import_picocolors.default.gray(a)}`;
       default:
         return `${i}${import_picocolors.default.cyan(a)}  ${this.value ? `${import_picocolors.default.green(j2)} ${n}` : `${import_picocolors.default.dim(R2)} ${import_picocolors.default.dim(n)}`} ${import_picocolors.default.dim("/")} ${this.value ? `${import_picocolors.default.dim(R2)} ${import_picocolors.default.dim(t)}` : `${import_picocolors.default.green(j2)} ${t}`}
+${import_picocolors.default.cyan(m2)}
+`;
+    }
+  } }).prompt();
+};
+var de = (s) => {
+  const n = (t, i) => {
+    const r2 = t.label ?? String(t.value);
+    switch (i) {
+      case "selected":
+        return `${import_picocolors.default.dim(r2)}`;
+      case "active":
+        return `${import_picocolors.default.green(j2)} ${r2} ${t.hint ? import_picocolors.default.dim(`(${t.hint})`) : ""}`;
+      case "cancelled":
+        return `${import_picocolors.default.strikethrough(import_picocolors.default.dim(r2))}`;
+      default:
+        return `${import_picocolors.default.dim(R2)} ${import_picocolors.default.dim(r2)}`;
+    }
+  };
+  return new jD({ options: s.options, initialValue: s.initialValue, render() {
+    const t = `${import_picocolors.default.gray(a)}
+${y2(this.state)}  ${s.message}
+`;
+    switch (this.state) {
+      case "submit":
+        return `${t}${import_picocolors.default.gray(a)}  ${n(this.options[this.cursor], "selected")}`;
+      case "cancel":
+        return `${t}${import_picocolors.default.gray(a)}  ${n(this.options[this.cursor], "cancelled")}
+${import_picocolors.default.gray(a)}`;
+      default:
+        return `${t}${import_picocolors.default.cyan(a)}  ${k2({ cursor: this.cursor, options: this.options, maxItems: s.maxItems, style: (i, r2) => n(i, r2 ? "active" : "inactive") }).join(`
+${import_picocolors.default.cyan(a)}  `)}
 ${import_picocolors.default.cyan(m2)}
 `;
     }
@@ -706,6 +766,29 @@ ${import_picocolors.default.gray(m2)}  ${s}
 
 `);
 };
+var v2 = { message: (s = "", { symbol: n = import_picocolors.default.gray(a) } = {}) => {
+  const t = [`${import_picocolors.default.gray(a)}`];
+  if (s) {
+    const [i, ...r2] = s.split(`
+`);
+    t.push(`${n}  ${i}`, ...r2.map((c2) => `${import_picocolors.default.gray(a)}  ${c2}`));
+  }
+  process.stdout.write(`${t.join(`
+`)}
+`);
+}, info: (s) => {
+  v2.message(s, { symbol: import_picocolors.default.blue(ae) });
+}, success: (s) => {
+  v2.message(s, { symbol: import_picocolors.default.green(oe) });
+}, step: (s) => {
+  v2.message(s, { symbol: import_picocolors.default.green(S2) });
+}, warn: (s) => {
+  v2.message(s, { symbol: import_picocolors.default.yellow(ce) });
+}, warning: (s) => {
+  v2.warn(s);
+}, error: (s) => {
+  v2.message(s, { symbol: import_picocolors.default.red(le) });
+} };
 var L2 = () => {
   const s = E ? ["\u25D2", "\u25D0", "\u25D3", "\u25D1"] : ["\u2022", "o", "O", "0"], n = E ? 80 : 120, t = process.env.CI === "true";
   let i, r2, c2 = false, o = "", l2;
@@ -748,45 +831,349 @@ var L2 = () => {
 
 // src/index.ts
 var import_picocolors2 = __toESM(require_picocolors(), 1);
-var TEMPLATES_DIR = path.join(import.meta.dir, "..", "templates");
+var TEMPLATES_DIR = join(import.meta.dir, "..", "templates");
+var MCP_CATEGORIES = [
+  {
+    id: "zai",
+    name: "Z.AI Suite",
+    description: "Vision, web search, reader, GitHub docs (requires Z_AI_API_KEY)",
+    requiresEnvVar: "Z_AI_API_KEY",
+    mcps: [
+      {
+        id: "zai-vision",
+        name: "Vision",
+        description: "Image/video analysis, UI screenshots",
+        config: {
+          type: "local",
+          command: ["bunx", "-y", "@z_ai/mcp-server"],
+          environment: {
+            Z_AI_API_KEY: "{env:Z_AI_API_KEY}",
+            Z_AI_MODE: "ZAI"
+          }
+        },
+        toolPattern: "zai-vision_*",
+        agentAccess: ["coder", "frontend"]
+      },
+      {
+        id: "zai-search",
+        name: "Web Search",
+        description: "Real-time web search",
+        config: {
+          type: "remote",
+          url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
+          headers: { Authorization: "Bearer {env:Z_AI_API_KEY}" }
+        },
+        toolPattern: "zai-search_*",
+        agentAccess: ["researcher"]
+      },
+      {
+        id: "zai-reader",
+        name: "Web Reader",
+        description: "Fetch and parse webpage content",
+        config: {
+          type: "remote",
+          url: "https://api.z.ai/api/mcp/web_reader/mcp",
+          headers: { Authorization: "Bearer {env:Z_AI_API_KEY}" }
+        },
+        toolPattern: "zai-reader_*",
+        agentAccess: ["researcher"]
+      },
+      {
+        id: "zai-zread",
+        name: "Zread",
+        description: "GitHub repo understanding",
+        config: {
+          type: "remote",
+          url: "https://api.z.ai/api/mcp/zread/mcp",
+          headers: { Authorization: "Bearer {env:Z_AI_API_KEY}" }
+        },
+        toolPattern: "zai-zread_*",
+        agentAccess: ["researcher"]
+      }
+    ]
+  },
+  {
+    id: "project-management",
+    name: "Project Management",
+    description: "Issue tracking and documentation (OAuth on first use)",
+    mcps: [
+      {
+        id: "linear",
+        name: "Linear",
+        description: "Issue tracking",
+        config: {
+          type: "local",
+          command: ["bunx", "-y", "mcp-remote", "https://mcp.linear.app/mcp"]
+        },
+        toolPattern: "linear_*",
+        agentAccess: ["researcher"]
+      },
+      {
+        id: "notion",
+        name: "Notion",
+        description: "Documentation and knowledge base",
+        config: {
+          type: "local",
+          command: ["bunx", "-y", "mcp-remote", "https://mcp.notion.com/mcp"]
+        },
+        toolPattern: "notion_*",
+        agentAccess: ["researcher"]
+      }
+    ]
+  },
+  {
+    id: "utilities",
+    name: "Utilities",
+    description: "Library docs and code search (no auth required)",
+    mcps: [
+      {
+        id: "context7",
+        name: "Context7",
+        description: "Library/docs lookup",
+        config: {
+          type: "remote",
+          url: "https://mcp.context7.com/mcp"
+        },
+        toolPattern: "context7_*",
+        agentAccess: ["researcher", "coder", "frontend"]
+      },
+      {
+        id: "grep_app",
+        name: "Grep.app",
+        description: "GitHub code search",
+        config: {
+          type: "remote",
+          url: "https://mcp.grep.app"
+        },
+        toolPattern: "grep_app_*",
+        agentAccess: ["researcher"]
+      }
+    ]
+  }
+];
 async function copyDir(src, dest) {
   let count = 0;
-  await fs.mkdir(dest, { recursive: true });
-  const entries = await fs.readdir(src, { withFileTypes: true });
+  await mkdir(dest, { recursive: true });
+  const entries = await readdir(src, { withFileTypes: true });
   for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
     if (entry.isDirectory()) {
       count += await copyDir(srcPath, destPath);
     } else {
-      await fs.copyFile(srcPath, destPath);
+      await Bun.write(destPath, Bun.file(srcPath));
       count++;
     }
   }
   return count;
 }
 async function fileExists(filePath) {
+  return await Bun.file(filePath).exists();
+}
+async function readJsonFile(filePath) {
   try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
+    const file = Bun.file(filePath);
+    if (!await file.exists()) {
+      return { data: null, error: "not_found" };
+    }
+    const content = await file.text();
+    const stripped = content.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1");
+    return { data: JSON.parse(stripped), error: null };
+  } catch (err) {
+    const error = err;
+    return { data: null, error: "parse_error", rawError: error };
   }
+}
+async function writeJsonFile(filePath, data) {
+  await Bun.write(filePath, JSON.stringify(data, null, 2) + `
+`);
+}
+function getTimestamp() {
+  const now = new Date;
+  return now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+async function backupConfig(configDir) {
+  const backupDir = `${configDir}.backup-${getTimestamp()}`;
+  try {
+    const entries = await readdir(configDir);
+    if (entries.length === 0)
+      return null;
+    await copyDir(configDir, backupDir);
+    return backupDir;
+  } catch {
+    return null;
+  }
+}
+function mergeConfig(existing, selectedMcps, pluginChoices) {
+  const base = existing || {
+    $schema: "https://opencode.ai/config.json"
+  };
+  const existingPlugins = base.plugin || [];
+  const newPlugins = [];
+  if (pluginChoices.notify && !existingPlugins.includes("@op1/notify")) {
+    newPlugins.push("@op1/notify");
+  }
+  if (pluginChoices.workspace && !existingPlugins.includes("@op1/workspace")) {
+    newPlugins.push("@op1/workspace");
+  }
+  if (newPlugins.length > 0 || existingPlugins.length > 0) {
+    base.plugin = [...existingPlugins, ...newPlugins];
+  }
+  if (!base.model) {
+    base.model = "anthropic/claude-sonnet-4-20250514";
+  }
+  if (!base.small_model) {
+    base.small_model = "anthropic/claude-sonnet-4-20250514";
+  }
+  if (!base.default_agent) {
+    base.default_agent = "build";
+  }
+  if (!base.permission) {
+    base.permission = {
+      edit: "allow",
+      bash: "allow",
+      task: "allow",
+      skill: "allow",
+      glob: "allow",
+      grep: "allow",
+      read: "allow",
+      webfetch: "allow",
+      websearch: "allow",
+      codesearch: "allow",
+      todowrite: "allow",
+      todoread: "allow",
+      question: "allow"
+    };
+  }
+  base.mcp = base.mcp || {};
+  for (const mcp of selectedMcps) {
+    if (!base.mcp[mcp.id]) {
+      base.mcp[mcp.id] = mcp.config;
+    }
+  }
+  base.tools = base.tools || {};
+  for (const mcp of selectedMcps) {
+    if (base.tools[mcp.toolPattern] === undefined) {
+      base.tools[mcp.toolPattern] = false;
+    }
+  }
+  base.agent = base.agent || {};
+  const agentTools = {};
+  for (const mcp of selectedMcps) {
+    for (const agent of mcp.agentAccess) {
+      if (!agentTools[agent]) {
+        agentTools[agent] = [];
+      }
+      agentTools[agent].push(mcp.toolPattern);
+    }
+  }
+  for (const [agentName, tools] of Object.entries(agentTools)) {
+    if (!base.agent[agentName]) {
+      base.agent[agentName] = { tools: {} };
+    }
+    if (!base.agent[agentName].tools) {
+      base.agent[agentName].tools = {};
+    }
+    for (const tool of tools) {
+      if (base.agent[agentName].tools[tool] === undefined) {
+        base.agent[agentName].tools[tool] = true;
+      }
+    }
+  }
+  if (!base.compaction) {
+    base.compaction = { auto: true, prune: true };
+  }
+  return base;
 }
 async function main() {
   console.clear();
   we(`${import_picocolors2.default.bgCyan(import_picocolors2.default.black(" op1 "))} ${import_picocolors2.default.dim("OpenCode harness installer")}`);
-  const cwd = process.cwd();
-  const opencodeDir = path.join(cwd, ".opencode");
-  const existingConfig = await fileExists(opencodeDir);
-  if (existingConfig) {
-    const shouldContinue = await me({
-      message: `${import_picocolors2.default.yellow(".opencode")} directory already exists. Continue and merge?`,
-      initialValue: true
-    });
-    if (BD(shouldContinue) || !shouldContinue) {
-      ve("Installation cancelled.");
-      process.exit(0);
+  const homeDir = homedir();
+  const globalConfigDir = join(homeDir, ".config", "opencode");
+  const globalConfigFile = join(globalConfigDir, "opencode.json");
+  const configDirExists = await fileExists(globalConfigDir);
+  const configFileResult = await readJsonFile(globalConfigFile);
+  let existingJson = null;
+  let backupPath = null;
+  const hasConfigFile = configFileResult.error !== "not_found";
+  const hasValidConfig = configFileResult.data !== null && configFileResult.error === null;
+  const hasMalformedConfig = configFileResult.error === "parse_error";
+  if (configDirExists) {
+    if (hasMalformedConfig) {
+      v2.error(`${import_picocolors2.default.red("Malformed config")} at ${import_picocolors2.default.dim(globalConfigFile)}`);
+      if (configFileResult.rawError) {
+        v2.error(`  ${import_picocolors2.default.dim(configFileResult.rawError.message)}`);
+      }
+      const action = await de({
+        message: "Your opencode.json has syntax errors. How would you like to proceed?",
+        options: [
+          {
+            value: "backup-replace",
+            label: "Backup and replace",
+            hint: "Creates backup, installs fresh config (recommended)"
+          },
+          {
+            value: "cancel",
+            label: "Cancel",
+            hint: "Fix the JSON manually first"
+          }
+        ]
+      });
+      if (BD(action) || action === "cancel") {
+        ve("Please fix the JSON errors and try again.");
+        process.exit(0);
+      }
+      backupPath = await backupConfig(globalConfigDir);
+      if (backupPath) {
+        v2.success(`Backup created at ${import_picocolors2.default.dim(backupPath)}`);
+      }
+      existingJson = null;
+    } else if (hasValidConfig) {
+      v2.info(`${import_picocolors2.default.yellow("Found existing config")} at ${import_picocolors2.default.dim(globalConfigDir)}`);
+      const action = await de({
+        message: "How would you like to proceed?",
+        options: [
+          {
+            value: "merge",
+            label: "Merge with existing",
+            hint: "Preserves your settings, adds op1 components"
+          },
+          {
+            value: "backup-replace",
+            label: "Backup and replace",
+            hint: "Creates backup, installs fresh config"
+          },
+          {
+            value: "cancel",
+            label: "Cancel",
+            hint: "Exit without changes"
+          }
+        ]
+      });
+      if (BD(action) || action === "cancel") {
+        ve("Installation cancelled.");
+        process.exit(0);
+      }
+      backupPath = await backupConfig(globalConfigDir);
+      if (backupPath) {
+        v2.success(`Backup created at ${import_picocolors2.default.dim(backupPath)}`);
+      }
+      if (action === "merge") {
+        existingJson = configFileResult.data;
+      } else {
+        existingJson = null;
+      }
+    } else if (!hasConfigFile) {
+      v2.info(`${import_picocolors2.default.yellow("Found config directory")} at ${import_picocolors2.default.dim(globalConfigDir)} (no opencode.json)`);
+      const shouldContinue = await me({
+        message: "Add op1 configuration to this directory?",
+        initialValue: true
+      });
+      if (BD(shouldContinue) || !shouldContinue) {
+        ve("Installation cancelled.");
+        process.exit(0);
+      }
+      existingJson = null;
     }
   }
   const components = await pe({
@@ -811,14 +1198,9 @@ async function main() {
         value: "plugins",
         label: "Plugins",
         hint: "Notify + Workspace plugins"
-      },
-      {
-        value: "config",
-        label: "Config",
-        hint: "opencode.jsonc with MCP servers"
       }
     ],
-    initialValues: ["agents", "commands", "skills", "plugins", "config"],
+    initialValues: ["agents", "commands", "skills", "plugins"],
     required: true
   });
   if (BD(components)) {
@@ -829,8 +1211,7 @@ async function main() {
     agents: components.includes("agents"),
     commands: components.includes("commands"),
     skills: components.includes("skills"),
-    plugins: components.includes("plugins"),
-    config: components.includes("config")
+    plugins: components.includes("plugins")
   };
   let pluginChoices = { notify: true, workspace: true };
   if (options.plugins) {
@@ -858,89 +1239,131 @@ async function main() {
       };
     }
   }
+  v2.info(`
+${import_picocolors2.default.bold("MCP Server Configuration")}`);
+  const selectedCategories = await pe({
+    message: "Which MCP categories do you want to enable?",
+    options: MCP_CATEGORIES.map((cat) => ({
+      value: cat.id,
+      label: cat.name,
+      hint: cat.description
+    })),
+    initialValues: ["utilities"],
+    required: false
+  });
+  if (BD(selectedCategories)) {
+    ve("Installation cancelled.");
+    process.exit(0);
+  }
+  const selectedMcps = [];
+  for (const categoryId of selectedCategories) {
+    const category = MCP_CATEGORIES.find((c2) => c2.id === categoryId);
+    if (!category)
+      continue;
+    if (category.requiresEnvVar) {
+      const hasEnvVar = process.env[category.requiresEnvVar];
+      if (!hasEnvVar) {
+        v2.warn(`${import_picocolors2.default.yellow(category.name)} requires ${import_picocolors2.default.cyan(category.requiresEnvVar)} environment variable`);
+      }
+    }
+    const mcpSelection = await pe({
+      message: `Which ${category.name} servers do you want?`,
+      options: category.mcps.map((mcp) => ({
+        value: mcp.id,
+        label: mcp.name,
+        hint: mcp.description
+      })),
+      initialValues: category.mcps.map((m3) => m3.id),
+      required: false
+    });
+    if (!BD(mcpSelection)) {
+      for (const mcpId of mcpSelection) {
+        const mcp = category.mcps.find((m3) => m3.id === mcpId);
+        if (mcp)
+          selectedMcps.push(mcp);
+      }
+    }
+  }
   const s = L2();
   s.start("Installing op1 components...");
   let totalFiles = 0;
   try {
-    await fs.mkdir(opencodeDir, { recursive: true });
+    await mkdir(globalConfigDir, { recursive: true });
     if (options.agents) {
-      const src = path.join(TEMPLATES_DIR, "agent");
-      const dest = path.join(opencodeDir, "agent");
+      const src = join(TEMPLATES_DIR, "agent");
+      const dest = join(globalConfigDir, "agent");
       if (await fileExists(src)) {
         totalFiles += await copyDir(src, dest);
       }
     }
     if (options.commands) {
-      const src = path.join(TEMPLATES_DIR, "command");
-      const dest = path.join(opencodeDir, "command");
+      const src = join(TEMPLATES_DIR, "command");
+      const dest = join(globalConfigDir, "command");
       if (await fileExists(src)) {
         totalFiles += await copyDir(src, dest);
       }
     }
     if (options.skills) {
-      const src = path.join(TEMPLATES_DIR, "skill");
-      const dest = path.join(opencodeDir, "skill");
+      const src = join(TEMPLATES_DIR, "skill");
+      const dest = join(globalConfigDir, "skill");
       if (await fileExists(src)) {
         totalFiles += await copyDir(src, dest);
       }
     }
+    const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices);
+    await writeJsonFile(globalConfigFile, mergedConfig);
+    totalFiles++;
     if (options.plugins && (pluginChoices.notify || pluginChoices.workspace)) {
-      const pluginDir = path.join(opencodeDir, "plugin");
-      await fs.mkdir(pluginDir, { recursive: true });
+      const pluginDir = join(globalConfigDir, "plugin");
+      await mkdir(pluginDir, { recursive: true });
       const pluginInstructions = `# op1 Plugins
 
-To use op1 plugins, add them to your opencode.jsonc:
+To use op1 plugins, add them to your project:
 
-\`\`\`json
-{
-  "plugin": [
-${pluginChoices.notify ? '    "@op1/notify",' : ""}
-${pluginChoices.workspace ? '    "@op1/workspace"' : ""}
-  ]
-}
-\`\`\`
-
-Install via:
 \`\`\`bash
+cd your-project
 ${pluginChoices.notify ? "bun add @op1/notify" : ""}
 ${pluginChoices.workspace ? "bun add @op1/workspace" : ""}
 \`\`\`
+
+They are already configured in your opencode.json.
 `;
-      await fs.writeFile(path.join(pluginDir, "README.md"), pluginInstructions);
+      await Bun.write(join(pluginDir, "README.md"), pluginInstructions);
       totalFiles++;
-    }
-    if (options.config) {
-      const configSrc = path.join(TEMPLATES_DIR, "opencode.jsonc");
-      const configDest = path.join(cwd, "opencode.jsonc");
-      if (await fileExists(configSrc)) {
-        if (await fileExists(configDest)) {
-          const overwrite = await me({
-            message: `${import_picocolors2.default.yellow("opencode.jsonc")} already exists. Overwrite?`,
-            initialValue: false
-          });
-          if (!BD(overwrite) && overwrite) {
-            await fs.copyFile(configSrc, configDest);
-            totalFiles++;
-          }
-        } else {
-          await fs.copyFile(configSrc, configDest);
-          totalFiles++;
-        }
-      }
     }
     s.stop(`Installed ${totalFiles} files`);
   } catch (error) {
     s.stop("Installation failed");
     throw error;
   }
-  ye([
-    options.agents && `${import_picocolors2.default.green("\u2713")} Agents installed to .opencode/agent/`,
-    options.commands && `${import_picocolors2.default.green("\u2713")} Commands installed to .opencode/command/`,
-    options.skills && `${import_picocolors2.default.green("\u2713")} Skills installed to .opencode/skill/`,
-    options.plugins && `${import_picocolors2.default.green("\u2713")} Plugin instructions at .opencode/plugin/`,
-    options.config && `${import_picocolors2.default.green("\u2713")} Config at opencode.jsonc`
-  ].filter(Boolean).join(`
+  const summaryLines = [];
+  if (backupPath) {
+    summaryLines.push(`${import_picocolors2.default.blue("\u21A9")} Backup at ${import_picocolors2.default.dim(backupPath)}`);
+  }
+  if (options.agents) {
+    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Agents installed to ${import_picocolors2.default.dim("~/.config/opencode/agent/")}`);
+  }
+  if (options.commands) {
+    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Commands installed to ${import_picocolors2.default.dim("~/.config/opencode/command/")}`);
+  }
+  if (options.skills) {
+    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Skills installed to ${import_picocolors2.default.dim("~/.config/opencode/skill/")}`);
+  }
+  if (options.plugins) {
+    summaryLines.push(`${import_picocolors2.default.green("\u2713")} Plugins configured in opencode.json`);
+  }
+  if (selectedMcps.length > 0) {
+    summaryLines.push(`${import_picocolors2.default.green("\u2713")} MCPs configured: ${selectedMcps.map((m3) => import_picocolors2.default.cyan(m3.name)).join(", ")}`);
+  }
+  ye(summaryLines.join(`
 `), "Installation complete");
+  const missingEnvVars = MCP_CATEGORIES.filter((c2) => selectedCategories.includes(c2.id) && c2.requiresEnvVar).filter((c2) => !process.env[c2.requiresEnvVar]).map((c2) => c2.requiresEnvVar);
+  if (missingEnvVars.length > 0) {
+    v2.warn(`
+${import_picocolors2.default.yellow("\u26A0")} Set these environment variables for full functionality:
+` + missingEnvVars.map((v3) => `  ${import_picocolors2.default.cyan(v3)}`).join(`
+`));
+  }
   fe(`Run ${import_picocolors2.default.cyan("opencode")} to start coding with op1!`);
 }
 

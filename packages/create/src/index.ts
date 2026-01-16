@@ -1,23 +1,178 @@
 /**
  * op1 CLI Installer
  *
- * Interactive installer that scaffolds op1 config into user's project.
- * Supports selective installation of components.
+ * Interactive installer that scaffolds op1 config into user's ~/.config/opencode/.
+ * Supports selective installation of components with config backup and merge.
+ *
+ * Uses Bun-native APIs exclusively (no node: imports).
  */
 
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import { mkdir, readdir } from "fs/promises";
+import { join, basename } from "path";
+import { homedir } from "os";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 
-const TEMPLATES_DIR = path.join(import.meta.dir, "..", "templates");
+const TEMPLATES_DIR = join(import.meta.dir, "..", "templates");
+
+// =========================================
+// MCP DEFINITIONS BY CATEGORY
+// =========================================
+
+interface McpConfig {
+	type: "local" | "remote";
+	command?: string[];
+	url?: string;
+	headers?: Record<string, string>;
+	environment?: Record<string, string>;
+}
+
+interface McpDefinition {
+	id: string;
+	name: string;
+	description: string;
+	config: McpConfig;
+	toolPattern: string; // e.g., "linear_*"
+	agentAccess: string[]; // which agents should have access
+}
+
+interface McpCategory {
+	id: string;
+	name: string;
+	description: string;
+	requiresEnvVar?: string;
+	mcps: McpDefinition[];
+}
+
+const MCP_CATEGORIES: McpCategory[] = [
+	{
+		id: "zai",
+		name: "Z.AI Suite",
+		description: "Vision, web search, reader, GitHub docs (requires Z_AI_API_KEY)",
+		requiresEnvVar: "Z_AI_API_KEY",
+		mcps: [
+			{
+				id: "zai-vision",
+				name: "Vision",
+				description: "Image/video analysis, UI screenshots",
+				config: {
+					type: "local",
+					command: ["bunx", "-y", "@z_ai/mcp-server"],
+					environment: {
+						Z_AI_API_KEY: "{env:Z_AI_API_KEY}",
+						Z_AI_MODE: "ZAI",
+					},
+				},
+				toolPattern: "zai-vision_*",
+				agentAccess: ["coder", "frontend"],
+			},
+			{
+				id: "zai-search",
+				name: "Web Search",
+				description: "Real-time web search",
+				config: {
+					type: "remote",
+					url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
+					headers: { Authorization: "Bearer {env:Z_AI_API_KEY}" },
+				},
+				toolPattern: "zai-search_*",
+				agentAccess: ["researcher"],
+			},
+			{
+				id: "zai-reader",
+				name: "Web Reader",
+				description: "Fetch and parse webpage content",
+				config: {
+					type: "remote",
+					url: "https://api.z.ai/api/mcp/web_reader/mcp",
+					headers: { Authorization: "Bearer {env:Z_AI_API_KEY}" },
+				},
+				toolPattern: "zai-reader_*",
+				agentAccess: ["researcher"],
+			},
+			{
+				id: "zai-zread",
+				name: "Zread",
+				description: "GitHub repo understanding",
+				config: {
+					type: "remote",
+					url: "https://api.z.ai/api/mcp/zread/mcp",
+					headers: { Authorization: "Bearer {env:Z_AI_API_KEY}" },
+				},
+				toolPattern: "zai-zread_*",
+				agentAccess: ["researcher"],
+			},
+		],
+	},
+	{
+		id: "project-management",
+		name: "Project Management",
+		description: "Issue tracking and documentation (OAuth on first use)",
+		mcps: [
+			{
+				id: "linear",
+				name: "Linear",
+				description: "Issue tracking",
+				config: {
+					type: "local",
+					command: ["bunx", "-y", "mcp-remote", "https://mcp.linear.app/mcp"],
+				},
+				toolPattern: "linear_*",
+				agentAccess: ["researcher"],
+			},
+			{
+				id: "notion",
+				name: "Notion",
+				description: "Documentation and knowledge base",
+				config: {
+					type: "local",
+					command: ["bunx", "-y", "mcp-remote", "https://mcp.notion.com/mcp"],
+				},
+				toolPattern: "notion_*",
+				agentAccess: ["researcher"],
+			},
+		],
+	},
+	{
+		id: "utilities",
+		name: "Utilities",
+		description: "Library docs and code search (no auth required)",
+		mcps: [
+			{
+				id: "context7",
+				name: "Context7",
+				description: "Library/docs lookup",
+				config: {
+					type: "remote",
+					url: "https://mcp.context7.com/mcp",
+				},
+				toolPattern: "context7_*",
+				agentAccess: ["researcher", "coder", "frontend"],
+			},
+			{
+				id: "grep_app",
+				name: "Grep.app",
+				description: "GitHub code search",
+				config: {
+					type: "remote",
+					url: "https://mcp.grep.app",
+				},
+				toolPattern: "grep_app_*",
+				agentAccess: ["researcher"],
+			},
+		],
+	},
+];
+
+// =========================================
+// TYPES
+// =========================================
 
 interface InstallOptions {
 	agents: boolean;
 	commands: boolean;
 	skills: boolean;
 	plugins: boolean;
-	config: boolean;
 }
 
 interface PluginChoice {
@@ -25,19 +180,39 @@ interface PluginChoice {
 	workspace: boolean;
 }
 
+interface OpenCodeConfig {
+	$schema?: string;
+	plugin?: string[];
+	model?: string;
+	small_model?: string;
+	default_agent?: string;
+	permission?: Record<string, string>;
+	mcp?: Record<string, McpConfig>;
+	tools?: Record<string, boolean>;
+	agent?: Record<string, { tools?: Record<string, boolean> }>;
+	compaction?: { auto?: boolean; prune?: boolean };
+	provider?: Record<string, unknown>;
+	[key: string]: unknown;
+}
+
+// =========================================
+// UTILITY FUNCTIONS (Bun-native)
+// =========================================
+
 async function copyDir(src: string, dest: string): Promise<number> {
 	let count = 0;
-	await fs.mkdir(dest, { recursive: true });
+	await mkdir(dest, { recursive: true });
 
-	const entries = await fs.readdir(src, { withFileTypes: true });
+	const entries = await readdir(src, { withFileTypes: true });
 	for (const entry of entries) {
-		const srcPath = path.join(src, entry.name);
-		const destPath = path.join(dest, entry.name);
+		const srcPath = join(src, entry.name);
+		const destPath = join(dest, entry.name);
 
 		if (entry.isDirectory()) {
 			count += await copyDir(srcPath, destPath);
 		} else {
-			await fs.copyFile(srcPath, destPath);
+			// Bun-native file copy
+			await Bun.write(destPath, Bun.file(srcPath));
 			count++;
 		}
 	}
@@ -45,13 +220,175 @@ async function copyDir(src: string, dest: string): Promise<number> {
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
+	return await Bun.file(filePath).exists();
+}
+
+interface ReadJsonResult<T> {
+	data: T | null;
+	error: "not_found" | "parse_error" | null;
+	rawError?: Error;
+}
+
+async function readJsonFile<T>(filePath: string): Promise<ReadJsonResult<T>> {
 	try {
-		await fs.access(filePath);
-		return true;
-	} catch {
-		return false;
+		const file = Bun.file(filePath);
+		if (!(await file.exists())) {
+			return { data: null, error: "not_found" };
+		}
+		const content = await file.text();
+		// Strip JSONC comments (single-line only for simplicity)
+		const stripped = content.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1");
+		return { data: JSON.parse(stripped), error: null };
+	} catch (err) {
+		const error = err as Error;
+		return { data: null, error: "parse_error", rawError: error };
 	}
 }
+
+async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
+	await Bun.write(filePath, JSON.stringify(data, null, 2) + "\n");
+}
+
+function getTimestamp(): string {
+	const now = new Date();
+	return now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+
+// =========================================
+// BACKUP FUNCTIONS (Bun-native)
+// =========================================
+
+async function backupConfig(configDir: string): Promise<string | null> {
+	const backupDir = `${configDir}.backup-${getTimestamp()}`;
+	
+	try {
+		// Check if there's anything to backup
+		const entries = await readdir(configDir);
+		if (entries.length === 0) return null;
+		
+		// Copy entire directory
+		await copyDir(configDir, backupDir);
+		return backupDir;
+	} catch {
+		return null;
+	}
+}
+
+// =========================================
+// CONFIG MERGE FUNCTIONS
+// =========================================
+
+function mergeConfig(
+	existing: OpenCodeConfig | null,
+	selectedMcps: McpDefinition[],
+	pluginChoices: PluginChoice
+): OpenCodeConfig {
+	const base: OpenCodeConfig = existing || {
+		$schema: "https://opencode.ai/config.json",
+	};
+
+	// 1. Merge plugins
+	const existingPlugins = base.plugin || [];
+	const newPlugins: string[] = [];
+	if (pluginChoices.notify && !existingPlugins.includes("@op1/notify")) {
+		newPlugins.push("@op1/notify");
+	}
+	if (pluginChoices.workspace && !existingPlugins.includes("@op1/workspace")) {
+		newPlugins.push("@op1/workspace");
+	}
+	if (newPlugins.length > 0 || existingPlugins.length > 0) {
+		base.plugin = [...existingPlugins, ...newPlugins];
+	}
+
+	// 2. Set defaults if not present
+	if (!base.model) {
+		base.model = "anthropic/claude-sonnet-4-20250514";
+	}
+	if (!base.small_model) {
+		base.small_model = "anthropic/claude-sonnet-4-20250514";
+	}
+	if (!base.default_agent) {
+		base.default_agent = "build";
+	}
+
+	// 3. Merge permissions (only add if not present)
+	if (!base.permission) {
+		base.permission = {
+			edit: "allow",
+			bash: "allow",
+			task: "allow",
+			skill: "allow",
+			glob: "allow",
+			grep: "allow",
+			read: "allow",
+			webfetch: "allow",
+			websearch: "allow",
+			codesearch: "allow",
+			todowrite: "allow",
+			todoread: "allow",
+			question: "allow",
+		};
+	}
+
+	// 4. Merge MCP servers
+	base.mcp = base.mcp || {};
+	for (const mcp of selectedMcps) {
+		// Only add if not already present
+		if (!base.mcp[mcp.id]) {
+			base.mcp[mcp.id] = mcp.config;
+		}
+	}
+
+	// 5. Merge tool visibility (disable by default, agents enable)
+	base.tools = base.tools || {};
+	for (const mcp of selectedMcps) {
+		// Set to false if not already configured
+		if (base.tools[mcp.toolPattern] === undefined) {
+			base.tools[mcp.toolPattern] = false;
+		}
+	}
+
+	// 6. Merge agent tool overrides
+	base.agent = base.agent || {};
+	
+	// Build agent -> tools mapping from selected MCPs
+	const agentTools: Record<string, string[]> = {};
+	for (const mcp of selectedMcps) {
+		for (const agent of mcp.agentAccess) {
+			if (!agentTools[agent]) {
+				agentTools[agent] = [];
+			}
+			agentTools[agent].push(mcp.toolPattern);
+		}
+	}
+
+	// Apply agent tool overrides
+	for (const [agentName, tools] of Object.entries(agentTools)) {
+		if (!base.agent[agentName]) {
+			base.agent[agentName] = { tools: {} };
+		}
+		if (!base.agent[agentName].tools) {
+			base.agent[agentName].tools = {};
+		}
+		for (const tool of tools) {
+			// Only set to true if not already configured
+			if (base.agent[agentName].tools![tool] === undefined) {
+				base.agent[agentName].tools![tool] = true;
+			}
+		}
+	}
+
+	// 7. Merge compaction (only add if not present)
+	if (!base.compaction) {
+		base.compaction = { auto: true, prune: true };
+	}
+
+	return base;
+}
+
+// =========================================
+// MAIN INSTALLER
+// =========================================
 
 export async function main() {
 	console.clear();
@@ -60,20 +397,115 @@ export async function main() {
 		`${pc.bgCyan(pc.black(" op1 "))} ${pc.dim("OpenCode harness installer")}`,
 	);
 
-	const cwd = process.cwd();
-	const opencodeDir = path.join(cwd, ".opencode");
+	// Determine target directory
+	const homeDir = homedir();
+	const globalConfigDir = join(homeDir, ".config", "opencode");
+	const globalConfigFile = join(globalConfigDir, "opencode.json");
 
-	// Check if .opencode already exists
-	const existingConfig = await fileExists(opencodeDir);
-	if (existingConfig) {
-		const shouldContinue = await p.confirm({
-			message: `${pc.yellow(".opencode")} directory already exists. Continue and merge?`,
-			initialValue: true,
-		});
+	// Check for existing installation
+	const configDirExists = await fileExists(globalConfigDir);
+	const configFileResult = await readJsonFile<OpenCodeConfig>(globalConfigFile);
+	
+	let existingJson: OpenCodeConfig | null = null;
+	let backupPath: string | null = null;
 
-		if (p.isCancel(shouldContinue) || !shouldContinue) {
-			p.cancel("Installation cancelled.");
-			process.exit(0);
+	// Determine the actual state
+	const hasConfigFile = configFileResult.error !== "not_found";
+	const hasValidConfig = configFileResult.data !== null && configFileResult.error === null;
+	const hasMalformedConfig = configFileResult.error === "parse_error";
+
+	if (configDirExists) {
+		// Handle malformed JSON first
+		if (hasMalformedConfig) {
+			p.log.error(`${pc.red("Malformed config")} at ${pc.dim(globalConfigFile)}`);
+			if (configFileResult.rawError) {
+				p.log.error(`  ${pc.dim(configFileResult.rawError.message)}`);
+			}
+			
+			const action = await p.select({
+				message: "Your opencode.json has syntax errors. How would you like to proceed?",
+				options: [
+					{
+						value: "backup-replace",
+						label: "Backup and replace",
+						hint: "Creates backup, installs fresh config (recommended)",
+					},
+					{
+						value: "cancel",
+						label: "Cancel",
+						hint: "Fix the JSON manually first",
+					},
+				],
+			});
+
+			if (p.isCancel(action) || action === "cancel") {
+				p.cancel("Please fix the JSON errors and try again.");
+				process.exit(0);
+			}
+
+			// Create backup of malformed config
+			backupPath = await backupConfig(globalConfigDir);
+			if (backupPath) {
+				p.log.success(`Backup created at ${pc.dim(backupPath)}`);
+			}
+			existingJson = null; // Start fresh
+		}
+		// Handle valid config
+		else if (hasValidConfig) {
+			p.log.info(`${pc.yellow("Found existing config")} at ${pc.dim(globalConfigDir)}`);
+			
+			const action = await p.select({
+				message: "How would you like to proceed?",
+				options: [
+					{
+						value: "merge",
+						label: "Merge with existing",
+						hint: "Preserves your settings, adds op1 components",
+					},
+					{
+						value: "backup-replace",
+						label: "Backup and replace",
+						hint: "Creates backup, installs fresh config",
+					},
+					{
+						value: "cancel",
+						label: "Cancel",
+						hint: "Exit without changes",
+					},
+				],
+			});
+
+			if (p.isCancel(action) || action === "cancel") {
+				p.cancel("Installation cancelled.");
+				process.exit(0);
+			}
+
+			// Create backup
+			backupPath = await backupConfig(globalConfigDir);
+			if (backupPath) {
+				p.log.success(`Backup created at ${pc.dim(backupPath)}`);
+			}
+
+			if (action === "merge") {
+				existingJson = configFileResult.data;
+			} else {
+				existingJson = null; // Start fresh
+			}
+		}
+		// Handle directory exists but no config file
+		else if (!hasConfigFile) {
+			p.log.info(`${pc.yellow("Found config directory")} at ${pc.dim(globalConfigDir)} (no opencode.json)`);
+			
+			const shouldContinue = await p.confirm({
+				message: "Add op1 configuration to this directory?",
+				initialValue: true,
+			});
+
+			if (p.isCancel(shouldContinue) || !shouldContinue) {
+				p.cancel("Installation cancelled.");
+				process.exit(0);
+			}
+			existingJson = null; // Fresh config
 		}
 	}
 
@@ -101,13 +533,8 @@ export async function main() {
 				label: "Plugins",
 				hint: "Notify + Workspace plugins",
 			},
-			{
-				value: "config",
-				label: "Config",
-				hint: "opencode.jsonc with MCP servers",
-			},
 		],
-		initialValues: ["agents", "commands", "skills", "plugins", "config"],
+		initialValues: ["agents", "commands", "skills", "plugins"],
 		required: true,
 	});
 
@@ -121,10 +548,9 @@ export async function main() {
 		commands: components.includes("commands"),
 		skills: components.includes("skills"),
 		plugins: components.includes("plugins"),
-		config: components.includes("config"),
 	};
 
-	// Plugin selection if plugins chosen
+	// Plugin selection
 	let pluginChoices: PluginChoice = { notify: true, workspace: true };
 	if (options.plugins) {
 		const plugins = await p.multiselect({
@@ -153,6 +579,61 @@ export async function main() {
 		}
 	}
 
+	// MCP Category selection
+	p.log.info(`\n${pc.bold("MCP Server Configuration")}`);
+	
+	const selectedCategories = await p.multiselect({
+		message: "Which MCP categories do you want to enable?",
+		options: MCP_CATEGORIES.map((cat) => ({
+			value: cat.id,
+			label: cat.name,
+			hint: cat.description,
+		})),
+		initialValues: ["utilities"], // Default to just utilities (no auth required)
+		required: false,
+	});
+
+	if (p.isCancel(selectedCategories)) {
+		p.cancel("Installation cancelled.");
+		process.exit(0);
+	}
+
+	// Collect individual MCP selections per category
+	const selectedMcps: McpDefinition[] = [];
+
+	for (const categoryId of selectedCategories) {
+		const category = MCP_CATEGORIES.find((c) => c.id === categoryId);
+		if (!category) continue;
+
+		// Check for required env var
+		if (category.requiresEnvVar) {
+			const hasEnvVar = process.env[category.requiresEnvVar];
+			if (!hasEnvVar) {
+				p.log.warn(
+					`${pc.yellow(category.name)} requires ${pc.cyan(category.requiresEnvVar)} environment variable`
+				);
+			}
+		}
+
+		const mcpSelection = await p.multiselect({
+			message: `Which ${category.name} servers do you want?`,
+			options: category.mcps.map((mcp) => ({
+				value: mcp.id,
+				label: mcp.name,
+				hint: mcp.description,
+			})),
+			initialValues: category.mcps.map((m) => m.id), // Select all by default
+			required: false,
+		});
+
+		if (!p.isCancel(mcpSelection)) {
+			for (const mcpId of mcpSelection) {
+				const mcp = category.mcps.find((m) => m.id === mcpId);
+				if (mcp) selectedMcps.push(mcp);
+			}
+		}
+	}
+
 	// Installation
 	const s = p.spinner();
 	s.start("Installing op1 components...");
@@ -160,13 +641,13 @@ export async function main() {
 	let totalFiles = 0;
 
 	try {
-		// Create .opencode directory
-		await fs.mkdir(opencodeDir, { recursive: true });
+		// Create config directory
+		await mkdir(globalConfigDir, { recursive: true });
 
 		// Copy agents
 		if (options.agents) {
-			const src = path.join(TEMPLATES_DIR, "agent");
-			const dest = path.join(opencodeDir, "agent");
+			const src = join(TEMPLATES_DIR, "agent");
+			const dest = join(globalConfigDir, "agent");
 			if (await fileExists(src)) {
 				totalFiles += await copyDir(src, dest);
 			}
@@ -174,8 +655,8 @@ export async function main() {
 
 		// Copy commands
 		if (options.commands) {
-			const src = path.join(TEMPLATES_DIR, "command");
-			const dest = path.join(opencodeDir, "command");
+			const src = join(TEMPLATES_DIR, "command");
+			const dest = join(globalConfigDir, "command");
 			if (await fileExists(src)) {
 				totalFiles += await copyDir(src, dest);
 			}
@@ -183,65 +664,37 @@ export async function main() {
 
 		// Copy skills
 		if (options.skills) {
-			const src = path.join(TEMPLATES_DIR, "skill");
-			const dest = path.join(opencodeDir, "skill");
+			const src = join(TEMPLATES_DIR, "skill");
+			const dest = join(globalConfigDir, "skill");
 			if (await fileExists(src)) {
 				totalFiles += await copyDir(src, dest);
 			}
 		}
 
-		// Handle plugins - install from npm
-		if (options.plugins && (pluginChoices.notify || pluginChoices.workspace)) {
-			const pluginDir = path.join(opencodeDir, "plugin");
-			await fs.mkdir(pluginDir, { recursive: true });
+		// Merge and write config
+		const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices);
+		await writeJsonFile(globalConfigFile, mergedConfig);
+		totalFiles++;
 
-			// Create a simple instruction file for now
-			// In production, this would install @op1/notify and @op1/workspace
+		// Create plugin README
+		if (options.plugins && (pluginChoices.notify || pluginChoices.workspace)) {
+			const pluginDir = join(globalConfigDir, "plugin");
+			await mkdir(pluginDir, { recursive: true });
+
 			const pluginInstructions = `# op1 Plugins
 
-To use op1 plugins, add them to your opencode.jsonc:
+To use op1 plugins, add them to your project:
 
-\`\`\`json
-{
-  "plugin": [
-${pluginChoices.notify ? '    "@op1/notify",' : ""}
-${pluginChoices.workspace ? '    "@op1/workspace"' : ""}
-  ]
-}
-\`\`\`
-
-Install via:
 \`\`\`bash
+cd your-project
 ${pluginChoices.notify ? "bun add @op1/notify" : ""}
 ${pluginChoices.workspace ? "bun add @op1/workspace" : ""}
 \`\`\`
+
+They are already configured in your opencode.json.
 `;
-			await fs.writeFile(path.join(pluginDir, "README.md"), pluginInstructions);
+			await Bun.write(join(pluginDir, "README.md"), pluginInstructions);
 			totalFiles++;
-		}
-
-		// Copy config
-		if (options.config) {
-			const configSrc = path.join(TEMPLATES_DIR, "opencode.jsonc");
-			const configDest = path.join(cwd, "opencode.jsonc");
-
-			if (await fileExists(configSrc)) {
-				// Check if config already exists
-				if (await fileExists(configDest)) {
-					const overwrite = await p.confirm({
-						message: `${pc.yellow("opencode.jsonc")} already exists. Overwrite?`,
-						initialValue: false,
-					});
-
-					if (!p.isCancel(overwrite) && overwrite) {
-						await fs.copyFile(configSrc, configDest);
-						totalFiles++;
-					}
-				} else {
-					await fs.copyFile(configSrc, configDest);
-					totalFiles++;
-				}
-			}
 		}
 
 		s.stop(`Installed ${totalFiles} files`);
@@ -251,23 +704,46 @@ ${pluginChoices.workspace ? "bun add @op1/workspace" : ""}
 	}
 
 	// Summary
-	p.note(
-		[
-			options.agents && `${pc.green("✓")} Agents installed to .opencode/agent/`,
-			options.commands &&
-				`${pc.green("✓")} Commands installed to .opencode/command/`,
-			options.skills && `${pc.green("✓")} Skills installed to .opencode/skill/`,
-			options.plugins &&
-				`${pc.green("✓")} Plugin instructions at .opencode/plugin/`,
-			options.config && `${pc.green("✓")} Config at opencode.jsonc`,
-		]
-			.filter(Boolean)
-			.join("\n"),
-		"Installation complete",
-	);
+	const summaryLines: string[] = [];
+	
+	if (backupPath) {
+		summaryLines.push(`${pc.blue("↩")} Backup at ${pc.dim(backupPath)}`);
+	}
+	if (options.agents) {
+		summaryLines.push(`${pc.green("✓")} Agents installed to ${pc.dim("~/.config/opencode/agent/")}`);
+	}
+	if (options.commands) {
+		summaryLines.push(`${pc.green("✓")} Commands installed to ${pc.dim("~/.config/opencode/command/")}`);
+	}
+	if (options.skills) {
+		summaryLines.push(`${pc.green("✓")} Skills installed to ${pc.dim("~/.config/opencode/skill/")}`);
+	}
+	if (options.plugins) {
+		summaryLines.push(`${pc.green("✓")} Plugins configured in opencode.json`);
+	}
+	if (selectedMcps.length > 0) {
+		summaryLines.push(
+			`${pc.green("✓")} MCPs configured: ${selectedMcps.map((m) => pc.cyan(m.name)).join(", ")}`
+		);
+	}
+
+	p.note(summaryLines.join("\n"), "Installation complete");
+
+	// Show any required env vars
+	const missingEnvVars = MCP_CATEGORIES
+		.filter((c) => selectedCategories.includes(c.id) && c.requiresEnvVar)
+		.filter((c) => !process.env[c.requiresEnvVar!])
+		.map((c) => c.requiresEnvVar!);
+
+	if (missingEnvVars.length > 0) {
+		p.log.warn(
+			`\n${pc.yellow("⚠")} Set these environment variables for full functionality:\n` +
+			missingEnvVars.map((v) => `  ${pc.cyan(v)}`).join("\n")
+		);
+	}
 
 	p.outro(`Run ${pc.cyan("opencode")} to start coding with op1!`);
 }
 
-export { copyDir, fileExists };
-export type { InstallOptions, PluginChoice };
+export { copyDir, fileExists, mergeConfig, MCP_CATEGORIES };
+export type { InstallOptions, PluginChoice, McpDefinition, McpCategory, OpenCodeConfig };
