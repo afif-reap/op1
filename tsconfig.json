@@ -20,8 +20,8 @@
 			"@op1/notify/*": ["packages/notify/src/*"],
 			"@op1/workspace": ["packages/workspace/src/index.ts"],
 			"@op1/workspace/*": ["packages/workspace/src/*"],
-			"@op1/create": ["packages/create/src/index.ts"],
-			"@op1/create/*": ["packages/create/src/*"]
+			"@op1/install": ["packages/install/src/index.ts"],
+			"@op1/install/*": ["packages/install/src/*"]
 		}
 	},
 	"exclude": ["node_modules", "dist", "**/dist"]

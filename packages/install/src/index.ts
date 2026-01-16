@@ -180,29 +180,26 @@ interface PluginChoice {
 	workspace: boolean;
 }
 
-// Agent model configuration
+// Agent model configuration - per-agent
 interface AgentModelConfig {
-	// Agents that need high-reasoning models (plan, oracle, reviewer)
-	thinking: string | null;
-	// Agents that write code (coder, frontend, build)
-	coding: string | null;
-	// Agents that do fast exploration (explore, researcher, scribe)
-	fast: string | null;
+	[agentName: string]: string | null;
 }
 
-// Agent categories for model assignment
-const AGENT_MODEL_CATEGORIES = {
-	thinking: ["plan", "oracle", "reviewer"],
-	coding: ["coder", "frontend", "build"],
-	fast: ["explore", "researcher", "scribe"],
-} as const;
+// All agents that can have models configured
+const ALL_AGENTS = [
+	"build",
+	"coder", 
+	"explore",
+	"frontend",
+	"oracle",
+	"plan",
+	"researcher",
+	"reviewer",
+	"scribe",
+] as const;
 
-// Default models (sensible defaults that work with standard providers)
-const DEFAULT_AGENT_MODELS: AgentModelConfig = {
-	thinking: null, // Use global model
-	coding: null,   // Use global model
-	fast: null,     // Use global model
-};
+// Default models - all null (use global model)
+const DEFAULT_AGENT_MODELS: AgentModelConfig = {};
 
 interface AgentConfig {
 	tools?: Record<string, boolean>;
@@ -253,6 +250,15 @@ async function fileExists(filePath: string): Promise<boolean> {
 	return await Bun.file(filePath).exists();
 }
 
+async function dirExists(dirPath: string): Promise<boolean> {
+	try {
+		const entries = await readdir(dirPath);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 interface ReadJsonResult<T> {
 	data: T | null;
 	error: "not_found" | "parse_error" | null;
@@ -280,25 +286,21 @@ async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
 }
 
 function getTimestamp(): string {
-	const now = new Date();
-	return now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+	return Date.now().toString();
 }
 
 // =========================================
 // BACKUP FUNCTIONS (Bun-native)
 // =========================================
 
-async function backupConfig(configDir: string): Promise<string | null> {
-	const backupDir = `${configDir}.backup-${getTimestamp()}`;
-	
+async function backupConfigFile(configFile: string): Promise<string | null> {
 	try {
-		// Check if there's anything to backup
-		const entries = await readdir(configDir);
-		if (entries.length === 0) return null;
+		const file = Bun.file(configFile);
+		if (!(await file.exists())) return null;
 		
-		// Copy entire directory
-		await copyDir(configDir, backupDir);
-		return backupDir;
+		const backupPath = configFile.replace(".json", `.${getTimestamp()}.json.bak`);
+		await Bun.write(backupPath, file);
+		return backupPath;
 	} catch {
 		return null;
 	}
@@ -310,15 +312,60 @@ async function backupConfig(configDir: string): Promise<string | null> {
 
 function mergeConfig(
 	existing: OpenCodeConfig | null,
+	originalConfig: OpenCodeConfig | null, // Always passed to preserve provider
 	selectedMcps: McpDefinition[],
 	pluginChoices: PluginChoice,
-	agentModels: AgentModelConfig
+	agentModels: AgentModelConfig,
+	globalModel: string | null, // Global model when user skips per-agent config
+	allAgents: string[] // All agent names to ensure they're in config
 ): OpenCodeConfig {
 	const base: OpenCodeConfig = existing || {
 		$schema: "https://opencode.ai/config.json",
 	};
 
-	// 1. Merge plugins
+	// 0. ALWAYS preserve critical settings from original config (even with backup-replace)
+	if (originalConfig) {
+		// Preserve provider
+		if (originalConfig.provider && !base.provider) {
+			base.provider = originalConfig.provider;
+		}
+		// Preserve existing plugins (merge, don't replace)
+		if (originalConfig.plugin && !base.plugin) {
+			base.plugin = [...originalConfig.plugin];
+		}
+		// Preserve existing MCPs (merge, don't replace)
+		if (originalConfig.mcp && !base.mcp) {
+			base.mcp = { ...originalConfig.mcp };
+		}
+		// Preserve existing tools config
+		if (originalConfig.tools && !base.tools) {
+			base.tools = { ...originalConfig.tools };
+		}
+		// Preserve existing agent config
+		if (originalConfig.agent && !base.agent) {
+			base.agent = { ...originalConfig.agent };
+		}
+		// Preserve model settings
+		if (originalConfig.model && !base.model) {
+			base.model = originalConfig.model;
+		}
+		if (originalConfig.small_model && !base.small_model) {
+			base.small_model = originalConfig.small_model;
+		}
+		if (originalConfig.default_agent && !base.default_agent) {
+			base.default_agent = originalConfig.default_agent;
+		}
+		// Preserve compaction settings
+		if (originalConfig.compaction && !base.compaction) {
+			base.compaction = originalConfig.compaction;
+		}
+		// Preserve permissions
+		if (originalConfig.permission && !base.permission) {
+			base.permission = originalConfig.permission;
+		}
+	}
+
+	// 1. Merge plugins (add op1 plugins if not already present)
 	const existingPlugins = base.plugin || [];
 	const newPlugins: string[] = [];
 	if (pluginChoices.notify && !existingPlugins.includes("@op1/notify")) {
@@ -331,35 +378,12 @@ function mergeConfig(
 		base.plugin = [...existingPlugins, ...newPlugins];
 	}
 
-	// 2. Set defaults if not present
-	if (!base.model) {
-		base.model = "proxy/claude-sonnet-4-5-thinking";
-	}
-	if (!base.small_model) {
-		base.small_model = "proxy/gemini-3-flash";
-	}
-	if (!base.default_agent) {
-		base.default_agent = "build";
-	}
+	// 2. Don't set model/small_model/default_agent - let user configure these themselves
+	// (removed: we no longer add default model settings)
 
-	// 3. Merge permissions (only add if not present)
-	if (!base.permission) {
-		base.permission = {
-			edit: "allow",
-			bash: "allow",
-			task: "allow",
-			skill: "allow",
-			glob: "allow",
-			grep: "allow",
-			read: "allow",
-			webfetch: "allow",
-			websearch: "allow",
-			codesearch: "allow",
-			todowrite: "allow",
-			todoread: "allow",
-			question: "allow",
-		};
-	}
+	// 3. Preserve existing permissions (don't add defaults - let OpenCode handle it)
+	// Only keep if user already has them configured
+	// (removed: we no longer add default permissions)
 
 	// 4. Merge MCP servers
 	base.mcp = base.mcp || {};
@@ -409,25 +433,33 @@ function mergeConfig(
 		}
 	}
 
-	// 7. Merge agent models (preserve existing, add new)
-	for (const [category, agents] of Object.entries(AGENT_MODEL_CATEGORIES)) {
-		const modelKey = category as keyof AgentModelConfig;
-		const model = agentModels[modelKey];
-		
+	// 6. Set global model if provided
+	if (globalModel && !base.model) {
+		base.model = globalModel;
+	}
+
+	// 7. Ensure all agents are in the config (with or without models)
+	for (const agentName of allAgents) {
+		if (!base.agent[agentName]) {
+			base.agent[agentName] = {};
+		}
+	}
+
+	// 8. Merge agent models (per-agent configuration)
+	// Only add models that were explicitly configured
+	for (const [agentName, model] of Object.entries(agentModels)) {
 		if (model) {
-			for (const agentName of agents) {
-				if (!base.agent[agentName]) {
-					base.agent[agentName] = {};
-				}
-				// Only set if not already configured (preserve user's existing choice)
-				if (!base.agent[agentName].model) {
-					base.agent[agentName].model = model;
-				}
+			if (!base.agent[agentName]) {
+				base.agent[agentName] = {};
+			}
+			// Only set if not already configured (preserve user's existing choice)
+			if (!base.agent[agentName].model) {
+				base.agent[agentName].model = model;
 			}
 		}
 	}
 
-	// 7. Merge compaction (only add if not present)
+	// 9. Merge compaction (only add if not present)
 	if (!base.compaction) {
 		base.compaction = { auto: true, prune: true };
 	}
@@ -452,11 +484,11 @@ export async function main() {
 	const globalConfigFile = join(globalConfigDir, "opencode.json");
 
 	// Check for existing installation
-	const configDirExists = await fileExists(globalConfigDir);
+	const configDirExists = await dirExists(globalConfigDir);
 	const configFileResult = await readJsonFile<OpenCodeConfig>(globalConfigFile);
 	
 	let existingJson: OpenCodeConfig | null = null;
-	let backupPath: string | null = null;
+	let configBackupPath: string | null = null;
 
 	// Determine the actual state
 	const hasConfigFile = configFileResult.error !== "not_found";
@@ -493,15 +525,21 @@ export async function main() {
 			}
 
 			// Create backup of malformed config
-			backupPath = await backupConfig(globalConfigDir);
-			if (backupPath) {
-				p.log.success(`Backup created at ${pc.dim(backupPath)}`);
+			configBackupPath = await backupConfigFile(globalConfigFile);
+			if (configBackupPath) {
+				p.log.success(`Config backup: ${pc.dim(configBackupPath)}`);
 			}
 			existingJson = null; // Start fresh
 		}
 		// Handle valid config
 		else if (hasValidConfig) {
 			p.log.info(`${pc.yellow("Found existing config")} at ${pc.dim(globalConfigDir)}`);
+			
+			// ALWAYS create backup before any changes
+			configBackupPath = await backupConfigFile(globalConfigFile);
+			if (configBackupPath) {
+				p.log.success(`Config backup: ${pc.dim(configBackupPath)}`);
+			}
 			
 			const action = await p.select({
 				message: "How would you like to proceed?",
@@ -513,8 +551,8 @@ export async function main() {
 					},
 					{
 						value: "backup-replace",
-						label: "Backup and replace",
-						hint: "Creates backup, installs fresh config",
+						label: "Replace config",
+						hint: "Start fresh (backup already created)",
 					},
 					{
 						value: "cancel",
@@ -527,12 +565,6 @@ export async function main() {
 			if (p.isCancel(action) || action === "cancel") {
 				p.cancel("Installation cancelled.");
 				process.exit(0);
-			}
-
-			// Create backup
-			backupPath = await backupConfig(globalConfigDir);
-			if (backupPath) {
-				p.log.success(`Backup created at ${pc.dim(backupPath)}`);
 			}
 
 			if (action === "merge") {
@@ -559,6 +591,7 @@ export async function main() {
 	}
 
 	// Component selection
+	p.log.info(pc.dim("Use ↑↓ to navigate, space to toggle, enter to confirm"));
 	const components = await p.multiselect({
 		message: "What would you like to install?",
 		options: [
@@ -599,134 +632,130 @@ export async function main() {
 		plugins: components.includes("plugins"),
 	};
 
-	// Plugin selection
-	let pluginChoices: PluginChoice = { notify: true, workspace: true };
+	// Plugin selection - workspace is always included, notifications optional
+	let pluginChoices: PluginChoice = { notify: false, workspace: true };
 	if (options.plugins) {
-		const plugins = await p.multiselect({
-			message: "Which plugins do you want?",
-			options: [
-				{
-					value: "notify",
-					label: "Notify",
-					hint: "Desktop notifications, focus detection, quiet hours",
-				},
-				{
-					value: "workspace",
-					label: "Workspace",
-					hint: "Plan management, notepads, verification hooks",
-				},
-			],
-			initialValues: ["notify", "workspace"],
-			required: false,
+		const wantNotify = await p.confirm({
+			message: "Enable desktop notifications? (sounds, focus detection, quiet hours)",
+			initialValue: true,
 		});
 
-		if (!p.isCancel(plugins)) {
-			pluginChoices = {
-				notify: plugins.includes("notify"),
-				workspace: plugins.includes("workspace"),
-			};
+		if (!p.isCancel(wantNotify)) {
+			pluginChoices.notify = wantNotify;
 		}
 	}
 
 	// MCP Category selection
 	p.log.info(`\n${pc.bold("MCP Server Configuration")}`);
 	
-	const selectedCategories = await p.multiselect({
-		message: "Which MCP categories do you want to enable?",
-		options: MCP_CATEGORIES.map((cat) => ({
-			value: cat.id,
-			label: cat.name,
-			hint: cat.description,
-		})),
-		initialValues: ["utilities"], // Default to just utilities (no auth required)
-		required: false,
-	});
-
-	if (p.isCancel(selectedCategories)) {
-		p.cancel("Installation cancelled.");
-		process.exit(0);
-	}
-
-	// Collect individual MCP selections per category
-	const selectedMcps: McpDefinition[] = [];
-
-	for (const categoryId of selectedCategories) {
-		const category = MCP_CATEGORIES.find((c) => c.id === categoryId);
-		if (!category) continue;
-
-		// Check for required env var
-		if (category.requiresEnvVar) {
-			const hasEnvVar = process.env[category.requiresEnvVar];
-			if (!hasEnvVar) {
-				p.log.warn(
-					`${pc.yellow(category.name)} requires ${pc.cyan(category.requiresEnvVar)} environment variable`
-				);
-			}
-		}
-
-		const mcpSelection = await p.multiselect({
-			message: `Which ${category.name} servers do you want?`,
-			options: category.mcps.map((mcp) => ({
-				value: mcp.id,
-				label: mcp.name,
-				hint: mcp.description,
+	// Always include utilities (context7, grep_app) - they're essential
+	const utilitiesCategory = MCP_CATEGORIES.find((c) => c.id === "utilities");
+	const selectedMcps: McpDefinition[] = utilitiesCategory ? [...utilitiesCategory.mcps] : [];
+	
+	// Ask about optional categories (excluding utilities which is always included)
+	const optionalCategories = MCP_CATEGORIES.filter((c) => c.id !== "utilities");
+	
+	if (optionalCategories.length > 0) {
+		p.log.info(pc.dim("Context7 and Grep.app are included by default."));
+		p.log.info(pc.dim("Use ↑↓ to navigate, space to toggle, enter to confirm"));
+		
+		const selectedCategories = await p.multiselect({
+			message: "Enable additional MCP categories?",
+			options: optionalCategories.map((cat) => ({
+				value: cat.id,
+				label: cat.name,
+				hint: cat.description,
 			})),
-			initialValues: category.mcps.map((m) => m.id), // Select all by default
+			initialValues: [],
 			required: false,
 		});
 
-		if (!p.isCancel(mcpSelection)) {
-			for (const mcpId of mcpSelection) {
-				const mcp = category.mcps.find((m) => m.id === mcpId);
-				if (mcp) selectedMcps.push(mcp);
+		if (p.isCancel(selectedCategories)) {
+			p.cancel("Installation cancelled.");
+			process.exit(0);
+		}
+
+		// Add all MCPs from selected categories
+		for (const categoryId of selectedCategories) {
+			const category = optionalCategories.find((c) => c.id === categoryId);
+			if (!category) continue;
+
+			// Check for required env var
+			if (category.requiresEnvVar) {
+				const hasEnvVar = process.env[category.requiresEnvVar];
+				if (!hasEnvVar) {
+					p.log.warn(
+						`${pc.yellow(category.name)} requires ${pc.cyan(category.requiresEnvVar)} environment variable`
+					);
+				}
 			}
+
+			// Add all MCPs from the selected category
+			for (const mcp of category.mcps) {
+				selectedMcps.push(mcp);
+			}
+			p.log.success(`Added ${category.name}: ${category.mcps.map((m) => m.name).join(", ")}`);
 		}
 	}
 
 	// Agent Model Configuration (only if agents are being installed)
 	let agentModels: AgentModelConfig = { ...DEFAULT_AGENT_MODELS };
 	
+	// All agent names - we'll ensure all are in the config
+	const allAgents = ["build", "coder", "explore", "frontend", "oracle", "plan", "researcher", "reviewer", "scribe"];
+	
+	// Track global model for when user skips per-agent config
+	let globalModelToSet: string | null = null;
+	
 	if (options.agents) {
 		p.log.info(`\n${pc.bold("Agent Model Configuration")}`);
-		p.log.info(pc.dim("Models are stored in opencode.json, preserved across updates."));
+		p.log.info(pc.dim("Press Enter to use suggested model, or type your own."));
 		
 		const configureModels = await p.confirm({
-			message: "Configure per-agent models? (Skip to use global default)",
+			message: "Configure per-agent models?",
 			initialValue: false,
 		});
 
 		if (!p.isCancel(configureModels) && configureModels) {
-			// Thinking agents (plan, oracle, reviewer) - need high reasoning
-			const thinkingModel = await p.text({
-				message: "Model for thinking agents (plan, oracle, reviewer):",
-				placeholder: "quotio/gpt-5.2-codex or proxy/claude-opus-4-5-thinking",
-				defaultValue: "",
-			});
-			if (!p.isCancel(thinkingModel) && thinkingModel.trim()) {
-				agentModels.thinking = thinkingModel.trim();
-			}
+			// Agent descriptions and suggested models
+			const agentPrompts: { name: string; desc: string; defaultModel: string }[] = [
+				{ name: "build", desc: "Build agent (default, writes code)", defaultModel: "proxy/claude-sonnet-4-5-thinking" },
+				{ name: "coder", desc: "Coder (atomic coding tasks)", defaultModel: "proxy/claude-opus-4-5-thinking" },
+				{ name: "frontend", desc: "Frontend (UI/UX specialist)", defaultModel: "proxy/gemini-3-pro-high" },
+				{ name: "plan", desc: "Plan (strategic planning)", defaultModel: "proxy/claude-opus-4-5-thinking" },
+				{ name: "oracle", desc: "Oracle (architecture, debugging)", defaultModel: "quotio/gpt-5.2-codex" },
+				{ name: "reviewer", desc: "Reviewer (code review)", defaultModel: "quotio/gpt-5.2-codex" },
+				{ name: "explore", desc: "Explore (codebase search)", defaultModel: "proxy/gemini-3-flash" },
+				{ name: "researcher", desc: "Researcher (external docs)", defaultModel: "proxy/gemini-3-flash" },
+				{ name: "scribe", desc: "Scribe (documentation)", defaultModel: "proxy/gemini-3-flash" },
+			];
 
-			// Coding agents (coder, frontend, build) - need good code generation
-			const codingModel = await p.text({
-				message: "Model for coding agents (coder, frontend, build):",
-				placeholder: "proxy/claude-opus-4-5-thinking or proxy/gemini-3-pro-high",
-				defaultValue: "",
-			});
-			if (!p.isCancel(codingModel) && codingModel.trim()) {
-				agentModels.coding = codingModel.trim();
+			for (const agent of agentPrompts) {
+				const model = await p.text({
+					message: `${agent.desc}:`,
+					placeholder: agent.defaultModel,
+					defaultValue: agent.defaultModel, // Enter uses this value
+				});
+				if (!p.isCancel(model) && model.trim()) {
+					agentModels[agent.name] = model.trim();
+				}
 			}
-
-			// Fast agents (explore, researcher, scribe) - need speed over quality
-			const fastModel = await p.text({
-				message: "Model for fast agents (explore, researcher, scribe):",
-				placeholder: "proxy/gemini-3-flash or quotio/gemini-2.5-flash",
-				defaultValue: "",
+		} else {
+			// User skipped per-agent config - ask for global model
+			const globalModel = await p.text({
+				message: "Global model for all agents:",
+				placeholder: "anthropic/claude-sonnet-4-20250514",
+				defaultValue: "anthropic/claude-sonnet-4-20250514",
 			});
-			if (!p.isCancel(fastModel) && fastModel.trim()) {
-				agentModels.fast = fastModel.trim();
+			
+			if (!p.isCancel(globalModel) && globalModel.trim()) {
+				globalModelToSet = globalModel.trim();
 			}
 		}
 	}
+
+	// Track if user configured models (for finish page instructions)
+	const hasConfiguredModels = Object.values(agentModels).some((m) => m && m.length > 0) || globalModelToSet !== null;
 
 	// Installation
 	const s = p.spinner();
@@ -742,7 +771,7 @@ export async function main() {
 		if (options.agents) {
 			const src = join(TEMPLATES_DIR, "agent");
 			const dest = join(globalConfigDir, "agent");
-			if (await fileExists(src)) {
+			if (await dirExists(src)) {
 				totalFiles += await copyDir(src, dest);
 			}
 		}
@@ -751,7 +780,7 @@ export async function main() {
 		if (options.commands) {
 			const src = join(TEMPLATES_DIR, "command");
 			const dest = join(globalConfigDir, "command");
-			if (await fileExists(src)) {
+			if (await dirExists(src)) {
 				totalFiles += await copyDir(src, dest);
 			}
 		}
@@ -760,36 +789,16 @@ export async function main() {
 		if (options.skills) {
 			const src = join(TEMPLATES_DIR, "skill");
 			const dest = join(globalConfigDir, "skill");
-			if (await fileExists(src)) {
+			if (await dirExists(src)) {
 				totalFiles += await copyDir(src, dest);
 			}
 		}
 
-		// Merge and write config
-		const mergedConfig = mergeConfig(existingJson, selectedMcps, pluginChoices, agentModels);
+		// Merge and write config (always pass original config to preserve provider)
+		const originalConfig = configFileResult.data;
+		const mergedConfig = mergeConfig(existingJson, originalConfig, selectedMcps, pluginChoices, agentModels, globalModelToSet, allAgents);
 		await writeJsonFile(globalConfigFile, mergedConfig);
 		totalFiles++;
-
-		// Create plugin README
-		if (options.plugins && (pluginChoices.notify || pluginChoices.workspace)) {
-			const pluginDir = join(globalConfigDir, "plugin");
-			await mkdir(pluginDir, { recursive: true });
-
-			const pluginInstructions = `# op1 Plugins
-
-To use op1 plugins, add them to your project:
-
-\`\`\`bash
-cd your-project
-${pluginChoices.notify ? "bun add @op1/notify" : ""}
-${pluginChoices.workspace ? "bun add @op1/workspace" : ""}
-\`\`\`
-
-They are already configured in your opencode.json.
-`;
-			await Bun.write(join(pluginDir, "README.md"), pluginInstructions);
-			totalFiles++;
-		}
 
 		s.stop(`Installed ${totalFiles} files`);
 	} catch (error) {
@@ -800,8 +809,8 @@ They are already configured in your opencode.json.
 	// Summary
 	const summaryLines: string[] = [];
 	
-	if (backupPath) {
-		summaryLines.push(`${pc.blue("↩")} Backup at ${pc.dim(backupPath)}`);
+	if (configBackupPath) {
+		summaryLines.push(`${pc.blue("↩")} Config backup: ${pc.dim(configBackupPath)}`);
 	}
 	if (options.agents) {
 		summaryLines.push(`${pc.green("✓")} Agents installed to ${pc.dim("~/.config/opencode/agent/")}`);
@@ -823,9 +832,15 @@ They are already configured in your opencode.json.
 
 	p.note(summaryLines.join("\n"), "Installation complete");
 
-	// Show any required env vars
+	// Show any required env vars (based on selected MCPs)
+	const selectedCategoryIds = [...new Set(
+		selectedMcps.map((mcp) => 
+			MCP_CATEGORIES.find((c) => c.mcps.some((m) => m.id === mcp.id))?.id
+		).filter(Boolean)
+	)] as string[];
+	
 	const missingEnvVars = MCP_CATEGORIES
-		.filter((c) => selectedCategories.includes(c.id) && c.requiresEnvVar)
+		.filter((c) => selectedCategoryIds.includes(c.id) && c.requiresEnvVar)
 		.filter((c) => !process.env[c.requiresEnvVar!])
 		.map((c) => c.requiresEnvVar!);
 

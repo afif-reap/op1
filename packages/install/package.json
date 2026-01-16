@@ -1,11 +1,10 @@
 {
-	"name": "@op1/create",
+	"name": "@op1/install",
 	"version": "0.1.0",
 	"description": "Interactive CLI installer for op1 - OpenCode harness with batteries included",
 	"type": "module",
 	"bin": {
-		"op1": "./bin/cli.js",
-		"create-op1": "./bin/cli.js"
+		"op1-install": "./bin/cli.js"
 	},
 	"main": "dist/index.js",
 	"exports": {
@@ -38,7 +37,7 @@
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/op1/op1.git",
-		"directory": "packages/create"
+		"directory": "packages/install"
 	},
 	"license": "MIT",
 	"keywords": [

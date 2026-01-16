@@ -9,7 +9,7 @@ op1 is an OpenCode harness with batteries included - minimal plugins, maximum ca
 
 | Package | Description | Entry |
 |---------|-------------|-------|
-| `@op1/create` | Interactive CLI installer | `bunx @op1/create` |
+| `@op1/install` | Interactive CLI installer | `bunx @op1/install` |
 | `@op1/notify` | Desktop notifications, focus detection | `bun add @op1/notify` |
 | `@op1/workspace` | Plan management, notepads, hooks | `bun add @op1/workspace` |
 
@@ -123,7 +123,7 @@ bun run lint
 bun run format
 
 # Build single package
-bun run build --filter @op1/create
+bun run build --filter @op1/install
 ```
 
 ## Structure
@@ -131,7 +131,7 @@ bun run build --filter @op1/create
 ```
 op1/
 ├── packages/
-│   ├── create/         # @op1/create - CLI installer
+│   ├── install/        # @op1/install - CLI installer
 │   │   └── src/index.ts
 │   ├── notify/         # @op1/notify - Notifications
 │   │   └── src/index.ts
@@ -148,7 +148,7 @@ op1/
 
 ## Package-Specific Notes
 
-### @op1/create
+### @op1/install
 
 Interactive installer that:
 1. Installs to `~/.config/opencode/` (global config)
