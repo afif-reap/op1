@@ -134,6 +134,47 @@ const MCP_CATEGORIES: McpCategory[] = [
 		],
 	},
 	{
+		id: "observability",
+		name: "Observability",
+		description: "Application monitoring and performance (requires NEW_RELIC_API_KEY)",
+		requiresEnvVar: "NEW_RELIC_API_KEY",
+		mcps: [
+			{
+				id: "newrelic",
+				name: "New Relic",
+				description: "APM, monitoring, incident management",
+				config: {
+					type: "remote",
+					url: "https://mcp.newrelic.com/mcp/",
+					headers: {
+						"api-key": "{env:NEW_RELIC_API_KEY}",
+						"include-tags": "discovery,alerting",
+					},
+				},
+				toolPattern: "newrelic_*",
+				agentAccess: ["researcher"],
+			},
+		],
+	},
+	{
+		id: "design",
+		name: "Design",
+		description: "Design system extraction and component specs (OAuth on first use)",
+		mcps: [
+			{
+				id: "figma",
+				name: "Figma",
+				description: "Design tokens, components, assets",
+				config: {
+					type: "remote",
+					url: "https://mcp.figma.com/mcp",
+				},
+				toolPattern: "figma_*",
+				agentAccess: ["researcher", "frontend"],
+			},
+		],
+	},
+	{
 		id: "utilities",
 		name: "Utilities",
 		description: "Library docs and code search (no auth required)",

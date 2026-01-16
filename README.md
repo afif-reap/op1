@@ -10,8 +10,8 @@ bunx @op1/install
 
 The interactive installer will:
 - Back up your existing config (if any)
-- Install 9 agents, 6 commands, and 17 skills
-- Configure MCP servers (Context7, Grep.app, Linear, Notion)
+- Install 9 agents, 6 commands, and 19 skills
+- Configure MCP servers (Z.AI, Linear, Notion, New Relic, Figma, Context7, Grep.app)
 - Set up plugins for notifications and workspace management
 - Let you configure per-agent models or a global model
 
@@ -67,9 +67,9 @@ Then add to your `opencode.json`:
 | `/oracle` | Consult oracle for architecture decisions |
 | `/research` | Research topics |
 
-### Skills (17)
+### Skills (19)
 
-Including: `ulw`, `code-philosophy`, `frontend-philosophy`, `playwright`, `linear`, `notion-research-documentation`, `git-master`, `tmux`, `code-review`, `analyze-mode`, `search-mode`, and more.
+Including: `ulw`, `code-philosophy`, `frontend-philosophy`, `playwright`, `linear`, `notion-research-documentation`, `newrelic`, `figma-design`, `git-master`, `tmux`, `code-review`, `analyze-mode`, `search-mode`, and more.
 
 ## Configuration
 

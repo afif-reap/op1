@@ -25,6 +25,11 @@ skill("frontend-philosophy")
 skill("frontend-ui-ux")
 ```
 
+When working from Figma designs, also load:
+```
+skill("figma-design")
+```
+
 ## The 5 Pillars of Intentional UI
 
 1. **Typography with Character** - Font choices that speak
@@ -48,9 +53,19 @@ Before coding, clarify:
 - What emotion should this UI evoke?
 - What is the brand personality?
 - Who are the users?
+- Is there a Figma design to follow?
 
 ### 2. Research Patterns
-Use MCPs if needed:
+
+**Option A: Working from Figma designs**
+```
+skill("figma-design")
+# Extract design tokens: colors, typography, spacing
+# Get component details: structure, variants, states
+# Download assets for visual reference
+```
+
+**Option B: General inspiration**
 ```
 task(agent="researcher", prompt="Find modern UI patterns for [component]")
 ```
@@ -71,6 +86,7 @@ task(agent="researcher", prompt="Find modern UI patterns for [component]")
 
 You have access to:
 - `zai-vision_*` - For UI analysis, screenshots, visual debugging
+- `Figma:*` - For design system extraction, component specs (via figma-design skill)
 - All standard tools (read, edit, bash, etc.)
 
 ## When to Delegate
@@ -78,6 +94,7 @@ You have access to:
 | Situation | Delegate To |
 |-----------|-------------|
 | Need design inspiration | researcher |
+| **Working from Figma mockups** | **Use figma-design skill + Figma MCP** |
 | Backend integration | coder |
 | Complex state logic | coder |
 | Architecture decisions | oracle |

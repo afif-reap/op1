@@ -87,13 +87,33 @@
 			"type": "local",
 			"command": ["bunx", "-y", "mcp-remote", "https://mcp.linear.app/mcp"]
 		},
-		// Notion MCP - Documentation and knowledge base
-		"notion": {
-			"type": "local",
-			"command": ["bunx", "-y", "mcp-remote", "https://mcp.notion.com/mcp"]
-		},
+	// Notion MCP - Documentation and knowledge base
+	"notion": {
+		"type": "local",
+		"command": ["bunx", "-y", "mcp-remote", "https://mcp.notion.com/mcp"]
+	},
 
-		// ----- Utility MCPs -----
+	// ----- Observability MCPs -----
+
+	// New Relic MCP - APM, monitoring, incident management
+	"newrelic": {
+		"type": "remote",
+		"url": "https://mcp.newrelic.com/mcp/",
+		"headers": {
+			"api-key": "{env:NEW_RELIC_API_KEY}",
+			"include-tags": "discovery,alerting"
+		}
+	},
+
+	// ----- Design MCPs -----
+
+	// Figma MCP - Design system extraction, component specs
+	"figma": {
+		"type": "remote",
+		"url": "https://mcp.figma.com/mcp"
+	},
+
+	// ----- Utility MCPs -----
 
 		// Context7 - Library/docs lookup
 		"context7": {
@@ -118,6 +138,8 @@
 		"zai-zread_*": false,
 		"linear_*": false,
 		"notion_*": false,
+		"newrelic_*": false,
+		"figma_*": false,
 		"context7_*": false,
 		"grep_app_*": false
 	},
@@ -133,6 +155,8 @@
 				"zai-zread_*": true,
 				"linear_*": true,
 				"notion_*": true,
+				"newrelic_*": true,
+				"figma_*": true,
 				"context7_*": true,
 				"grep_app_*": true
 			}
@@ -146,7 +170,8 @@
 		"frontend": {
 			"tools": {
 				"context7_*": true,
-				"zai-vision_*": true
+				"zai-vision_*": true,
+				"figma_*": true
 			}
 		}
 	},
