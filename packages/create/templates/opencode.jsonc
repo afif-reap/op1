@@ -1,0 +1,161 @@
+{
+	"$schema": "https://opencode.ai/config.json",
+
+	// =============================================
+	// op1 - OpenCode Harness Configuration
+	// Minimal plugins, maximum capability via skills/commands
+	// =============================================
+
+	// =============================================
+	// PLUGINS
+	// Install: bun add @op1/notify @op1/workspace
+	// =============================================
+	"plugin": ["@op1/notify", "@op1/workspace"],
+
+	// Default model - change to your preferred model
+	"model": "anthropic/claude-sonnet-4-20250514",
+	"small_model": "anthropic/claude-sonnet-4-20250514",
+
+	// Default agent when none specified
+	"default_agent": "build",
+
+	// =============================================
+	// PERMISSION DEFAULTS
+	// =============================================
+	"permission": {
+		"edit": "allow",
+		"bash": "allow",
+		"task": "allow",
+		"skill": "allow",
+		"glob": "allow",
+		"grep": "allow",
+		"read": "allow",
+		"webfetch": "allow",
+		"websearch": "allow",
+		"codesearch": "allow",
+		"todowrite": "allow",
+		"todoread": "allow",
+		"question": "allow"
+	},
+
+	// =============================================
+	// MCP SERVERS
+	// =============================================
+	"mcp": {
+		// ----- Z.AI Coding Plan MCPs -----
+		// Get your API key at: https://z.ai/manage-apikey/apikey-list
+
+		// Vision MCP - Image/video analysis, UI screenshots, diagrams
+		"zai-vision": {
+			"type": "local",
+			"command": ["bunx", "-y", "@z_ai/mcp-server"],
+			"environment": {
+				"Z_AI_API_KEY": "{env:Z_AI_API_KEY}",
+				"Z_AI_MODE": "ZAI"
+			}
+		},
+		// Web Search MCP - Real-time web search
+		"zai-search": {
+			"type": "remote",
+			"url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+			"headers": {
+				"Authorization": "Bearer {env:Z_AI_API_KEY}"
+			}
+		},
+		// Web Reader MCP - Fetch and parse webpage content
+		"zai-reader": {
+			"type": "remote",
+			"url": "https://api.z.ai/api/mcp/web_reader/mcp",
+			"headers": {
+				"Authorization": "Bearer {env:Z_AI_API_KEY}"
+			}
+		},
+		// Zread MCP - GitHub repo understanding
+		"zai-zread": {
+			"type": "remote",
+			"url": "https://api.z.ai/api/mcp/zread/mcp",
+			"headers": {
+				"Authorization": "Bearer {env:Z_AI_API_KEY}"
+			}
+		},
+
+		// ----- Project Management MCPs -----
+		// Uses OAuth - will prompt for authentication on first use
+
+		// Linear MCP - Issue tracking
+		"linear": {
+			"type": "local",
+			"command": ["bunx", "-y", "mcp-remote", "https://mcp.linear.app/mcp"]
+		},
+		// Notion MCP - Documentation and knowledge base
+		"notion": {
+			"type": "local",
+			"command": ["bunx", "-y", "mcp-remote", "https://mcp.notion.com/mcp"]
+		},
+
+		// ----- Utility MCPs -----
+
+		// Context7 - Library/docs lookup
+		"context7": {
+			"type": "remote",
+			"url": "https://mcp.context7.com/mcp"
+		},
+		// Grep.app - GitHub code search
+		"grep_app": {
+			"type": "remote",
+			"url": "https://mcp.grep.app"
+		}
+	},
+
+	// =============================================
+	// TOOL VISIBILITY
+	// Disable MCP tools globally, subagents enable specific tools
+	// =============================================
+	"tools": {
+		"zai-vision_*": false,
+		"zai-search_*": false,
+		"zai-reader_*": false,
+		"zai-zread_*": false,
+		"linear_*": false,
+		"notion_*": false,
+		"context7_*": false,
+		"grep_app_*": false
+	},
+
+	// =============================================
+	// AGENT-SPECIFIC TOOL OVERRIDES
+	// =============================================
+	"agent": {
+		"researcher": {
+			"tools": {
+				"zai-search_*": true,
+				"zai-reader_*": true,
+				"zai-zread_*": true,
+				"linear_*": true,
+				"notion_*": true,
+				"context7_*": true,
+				"grep_app_*": true
+			}
+		},
+		"coder": {
+			"tools": {
+				"context7_*": true,
+				"zai-vision_*": true
+			}
+		},
+		"frontend": {
+			"tools": {
+				"context7_*": true,
+				"zai-vision_*": true
+			}
+		}
+	},
+
+	// =============================================
+	// COMPACTION SETTINGS
+	// =============================================
+	"compaction": {
+		"auto": true,
+		"prune": true
+	}
+}

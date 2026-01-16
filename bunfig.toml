@@ -1,0 +1,11 @@
+# op1 Bun Configuration
+# Isolated installs for pnpm-like strictness (prevents phantom dependencies)
+
+[install]
+# Use isolated linking (similar to pnpm strict mode)
+# Each package only sees its declared dependencies
+auto = "fallback"
+
+[install.lockfile]
+# Use text lockfile for better git diffs
+save = true

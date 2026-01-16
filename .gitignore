@@ -1,24 +1,36 @@
 # Dependencies
 node_modules/
-.npm
+.pnpm-store/
 
 # Build outputs
 dist/
 *.js
 *.js.map
-!.opencode/plugin/*.js
+*.d.ts
+!packages/create/bin/*.js
 
-# Environment
-.env
-.env.local
+# Bun
+bun.lock
+*.lockb
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
+# Logs
+*.log
+npm-debug.log*
 
-# OpenCode workspace plans (project-scoped, git-safe but often local)
-.opencode/workspace/
+# Test coverage
+coverage/
+
+# Temp
+.tmp/
+.cache/

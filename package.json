@@ -1,0 +1,27 @@
+{
+	"name": "op1",
+	"private": true,
+	"version": "0.0.0",
+	"description": "op1 - OpenCode harness with batteries included",
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"build": "bun --filter '*' build",
+		"typecheck": "bun --filter '*' typecheck",
+		"dev": "bun --filter '*' dev",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"clean": "rm -rf packages/*/dist packages/*/*.js node_modules/.cache"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.11",
+		"@types/bun": "^1.1.0",
+		"typescript": "^5.7.0"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"packageManager": "bun@1.2.0"
+}
