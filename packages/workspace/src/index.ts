@@ -12,13 +12,134 @@ import { type Plugin, tool } from "@opencode-ai/plugin";
 import { z } from "zod";
 
 // ==========================================
-// VERIFICATION HOOKS
+// SAFETY HOOKS - ERROR DETECTION & RECOVERY
 // ==========================================
 
 /**
  * Agents that write code and require verification after completion
  */
 const IMPLEMENTER_AGENTS = ["coder", "frontend", "build"] as const;
+
+/**
+ * Tools that can produce large outputs that may need truncation
+ */
+const TRUNCATABLE_TOOLS = [
+	"grep",
+	"Grep",
+	"glob",
+	"Glob",
+	"read",
+	"Read",
+	"bash",
+	"Bash",
+] as const;
+
+/**
+ * Maximum output size before truncation (characters)
+ * ~50k tokens = ~200k chars, but we're more conservative
+ */
+const MAX_OUTPUT_CHARS = 100_000;
+const MAX_OUTPUT_LINES = 2000;
+
+/**
+ * Edit tool error patterns that indicate AI mistakes
+ */
+const EDIT_ERROR_PATTERNS = [
+	"oldString and newString must be different",
+	"oldString not found",
+	"oldString found multiple times",
+	"requires more code context",
+] as const;
+
+/**
+ * Recovery message for Edit tool failures
+ */
+const EDIT_ERROR_REMINDER = `
+<system-reminder>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ EDIT ERROR - IMMEDIATE ACTION REQUIRED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You made an Edit mistake. STOP and do this NOW:
+
+1. **READ the file** immediately to see its ACTUAL current state
+2. **VERIFY** what the content really looks like (your assumption was wrong)
+3. **CONTINUE** with corrected action based on the real file content
+
+DO NOT attempt another edit until you've read and verified the file state.
+</system-reminder>`;
+
+/**
+ * Warning message for empty task responses
+ */
+const EMPTY_TASK_WARNING = `
+<system-reminder>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ EMPTY TASK RESPONSE DETECTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The task completed but returned no response. This indicates:
+- The agent failed to execute properly
+- The agent did not terminate correctly
+- The agent returned an empty result
+
+**ACTION:** Re-delegate the task with more specific instructions,
+or investigate what went wrong before proceeding.
+</system-reminder>`;
+
+/**
+ * Anti-polling reminder for background tasks
+ */
+const ANTI_POLLING_REMINDER = `
+<system-reminder>
+⏳ Background task(s) running. You WILL be notified when complete.
+❌ Do NOT poll or check status - continue productive work on other tasks.
+</system-reminder>`;
+
+/**
+ * Truncate large tool output to prevent context overflow
+ */
+function truncateOutput(output: string): { result: string; truncated: boolean } {
+	const lines = output.split("\n");
+	
+	// Check line count
+	if (lines.length > MAX_OUTPUT_LINES) {
+		const truncated = lines.slice(0, MAX_OUTPUT_LINES).join("\n");
+		return {
+			result: `${truncated}\n\n... [OUTPUT TRUNCATED: ${lines.length - MAX_OUTPUT_LINES} more lines. Use grep with specific patterns to narrow results.]`,
+			truncated: true,
+		};
+	}
+	
+	// Check character count
+	if (output.length > MAX_OUTPUT_CHARS) {
+		const truncated = output.slice(0, MAX_OUTPUT_CHARS);
+		return {
+			result: `${truncated}\n\n... [OUTPUT TRUNCATED: ${output.length - MAX_OUTPUT_CHARS} more characters. Use more specific search patterns.]`,
+			truncated: true,
+		};
+	}
+	
+	return { result: output, truncated: false };
+}
+
+/**
+ * Check if output contains Edit error patterns
+ */
+function hasEditError(output: string): boolean {
+	const lowerOutput = output.toLowerCase();
+	return EDIT_ERROR_PATTERNS.some((pattern) =>
+		lowerOutput.includes(pattern.toLowerCase()),
+	);
+}
+
+/**
+ * Check if task response is empty or meaningless
+ */
+function isEmptyTaskResponse(output: string): boolean {
+	const trimmed = output?.trim() ?? "";
+	return trimmed === "" || trimmed === "undefined" || trimmed === "null";
+}
 
 /**
  * Run a command and get stdout using Bun.spawn
@@ -385,6 +506,123 @@ interface ActivePlanState {
 	started_at: string;
 	session_ids: string[];
 	plan_name: string;
+	title?: string;
+	description?: string;
+}
+
+// ==========================================
+// AUTO-METADATA GENERATION
+// ==========================================
+
+interface PlanMetadata {
+	title: string;
+	description: string;
+}
+
+/**
+ * Generate metadata (title/description) for a plan using small_model.
+ * Falls back to extraction from plan content if small_model is not configured.
+ */
+async function generatePlanMetadata(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	client: any,
+	planContent: string,
+	parentSessionID?: string,
+): Promise<PlanMetadata> {
+	// Fallback: Extract from plan content
+	const fallbackMetadata = (): PlanMetadata => {
+		// Try to extract goal from plan
+		const goalMatch = planContent.match(/## Goal\n\n?([^\n#]+)/);
+		const goal = goalMatch?.[1]?.trim();
+		
+		if (goal) {
+			// Use goal as title (truncated) and first sentence as description
+			const title = goal.length > 40 ? goal.slice(0, 37) + "..." : goal;
+			const description = goal.length > 150 ? goal.slice(0, 147) + "..." : goal;
+			return { title, description };
+		}
+		
+		// Fallback to first non-empty line
+		const firstLine = planContent.split("\n").find((l) => l.trim().length > 0 && !l.startsWith("---")) || "Implementation Plan";
+		const title = firstLine.replace(/^#+ /, "").slice(0, 40).trim();
+		const description = planContent.slice(0, 150).trim() + (planContent.length > 150 ? "..." : "");
+		return { title, description };
+	};
+
+	try {
+		// Check if small_model is configured
+		const config = await client.config.get();
+		const configData = config.data as { small_model?: string } | undefined;
+
+		if (!configData?.small_model) {
+			return fallbackMetadata();
+		}
+
+		// Create a session for metadata generation
+		const session = await client.session.create({
+			body: {
+				title: "Plan Metadata Generation",
+				parentID: parentSessionID,
+			},
+		});
+
+		if (!session.data?.id) {
+			return fallbackMetadata();
+		}
+
+		// Prompt the small model for metadata
+		const prompt = `Generate a title and description for this implementation plan.
+
+RULES:
+- Title: 3-6 words, max 40 characters, describe the main goal
+- Description: 1-2 sentences, max 150 characters, summarize what will be built
+
+PLAN CONTENT:
+${planContent.slice(0, 3000)}
+
+Respond with ONLY valid JSON in this exact format:
+{"title": "Your Title Here", "description": "Your description here."}`;
+
+		// Call with timeout
+		const PROMPT_TIMEOUT_MS = 15000;
+		const result = await Promise.race([
+			client.session.prompt({
+				path: { id: session.data.id },
+				body: {
+					parts: [{ type: "text" as const, text: prompt }],
+				},
+			}),
+			new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error("Prompt timeout")), PROMPT_TIMEOUT_MS),
+			),
+		]);
+
+		// Extract text from response
+		const responseParts = result.data?.parts as Array<{ type: string; text?: string }> | undefined;
+		const textPart = responseParts?.find((p) => p.type === "text" && typeof p.text === "string");
+		
+		if (!textPart?.text) {
+			return fallbackMetadata();
+		}
+
+		// Parse JSON response
+		const jsonMatch = textPart.text.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) {
+			return fallbackMetadata();
+		}
+
+		const parsed = JSON.parse(jsonMatch[0]) as { title?: string; description?: string };
+		if (!parsed.title || !parsed.description) {
+			return fallbackMetadata();
+		}
+
+		return {
+			title: parsed.title.slice(0, 40),
+			description: parsed.description.slice(0, 150),
+		};
+	} catch {
+		return fallbackMetadata();
+	}
 }
 
 // Slug generation (from opencode-source)
@@ -473,7 +711,14 @@ function getPlanName(planPath: string): string {
 }
 
 // Export functions for testing
-export { extractMarkdownParts, parsePlanMarkdown, formatGitStats };
+export {
+	extractMarkdownParts,
+	parsePlanMarkdown,
+	formatGitStats,
+	truncateOutput,
+	hasEditError,
+	isEmptyTaskResponse,
+};
 
 export const WorkspacePlugin: Plugin = async (ctx) => {
 	const { directory } = ctx;
@@ -636,19 +881,28 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 							existingState.session_ids.push(toolCtx.sessionID);
 							await writeActivePlanState(existingState);
 						}
-						} else {
-							await mkdir(plansDir, { recursive: true });
-							planPath = generatePlanPath(plansDir);
-							isNewPlan = true;
+				} else {
+						await mkdir(plansDir, { recursive: true });
+						planPath = generatePlanPath(plansDir);
+						isNewPlan = true;
 
-							const state: ActivePlanState = {
-								active_plan: planPath,
-								started_at: new Date().toISOString(),
-								session_ids: [toolCtx.sessionID],
-								plan_name: getPlanName(planPath),
-							};
-							await writeActivePlanState(state);
-						}
+						// Generate metadata for new plans
+						const metadata = await generatePlanMetadata(
+							ctx.client,
+							args.content,
+							toolCtx.sessionID,
+						);
+
+						const state: ActivePlanState = {
+							active_plan: planPath,
+							started_at: new Date().toISOString(),
+							session_ids: [toolCtx.sessionID],
+							plan_name: getPlanName(planPath),
+							title: metadata.title,
+							description: metadata.description,
+						};
+						await writeActivePlanState(state);
+					}
 
 						await Bun.write(planPath, args.content);
 
@@ -747,6 +1001,12 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 
 					if (activePlan) {
 					planList.push(`## Active Plan\n`);
+					if (activePlan.title) {
+						planList.push(`**Title**: ${activePlan.title}`);
+					}
+					if (activePlan.description) {
+						planList.push(`**Description**: ${activePlan.description}`);
+					}
 					planList.push(`**Name**: ${activePlan.plan_name}`);
 					planList.push(
 						`**Path**: ${relative(directory, activePlan.active_plan)}`,
@@ -774,6 +1034,102 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 					}
 
 					return planList.join("\n");
+				},
+			}),
+
+			// ==========================================
+			// MODE TRANSITION TOOLS
+			// ==========================================
+
+			plan_enter: tool({
+				description:
+					"Signal intent to enter planning mode. Returns instructions for creating a structured implementation plan. Use when a task is complex and requires upfront planning before implementation.",
+				args: {
+					reason: tool.schema
+						.string()
+						.describe("Why planning mode is needed (e.g., 'complex multi-step feature', 'architectural decision')"),
+				},
+				async execute(args) {
+					const activePlan = await readActivePlanState();
+					
+					if (activePlan) {
+						const relativePath = relative(directory, activePlan.active_plan);
+						return `📋 Active plan already exists: ${relativePath}
+
+To continue with existing plan:
+  → Use plan_read to review current state
+  → Update with plan_save when making progress
+
+To start fresh:
+  → Complete or archive the current plan first
+  → Then run /plan "your new task"`;
+					}
+
+					return `🎯 Planning Mode Requested: ${args.reason}
+
+To create a structured implementation plan:
+
+1. **Run the /plan command** with your task description:
+   /plan "${args.reason}"
+
+2. The plan agent will:
+   - Analyze the task complexity
+   - Research codebase patterns (if needed)
+   - Create a phased implementation plan
+   - Save it for cross-session persistence
+
+3. Once the plan is created:
+   - Use plan_read to review it
+   - Use /work to start implementation
+   - Update progress with plan_save
+
+💡 Tip: Load skill('plan-protocol') for the full plan format specification.`;
+				},
+			}),
+
+			plan_exit: tool({
+				description:
+					"Signal completion of planning phase. Returns instructions for transitioning to implementation mode. Call this after a plan is finalized and ready for execution.",
+				args: {
+					summary: tool.schema
+						.string()
+						.optional()
+						.describe("Brief summary of the completed plan"),
+				},
+				async execute(args) {
+					const activePlan = await readActivePlanState();
+					
+					if (!activePlan) {
+						return `⚠️ No active plan found. Nothing to exit from.
+
+To create a plan first:
+  → Run /plan "your task description"`;
+					}
+
+					const relativePath = relative(directory, activePlan.active_plan);
+					const summaryText = args.summary ? `\n\n**Summary**: ${args.summary}` : "";
+
+					return `✅ Planning phase complete!${summaryText}
+
+**Plan**: ${activePlan.plan_name}
+**Path**: ${relativePath}
+
+To begin implementation:
+
+1. **Run /work** to start executing the plan
+   → This delegates to the build agent with plan context
+
+2. Or manually:
+   → Use plan_read to review the plan
+   → Work through phases sequentially
+   → Mark tasks complete as you go
+   → Use notepad_write to record learnings
+
+3. Track progress:
+   → Update plan with plan_save after completing tasks
+   → Use todowrite for fine-grained task tracking
+
+🚀 Ready to ship!`;
 				},
 			}),
 
@@ -910,37 +1266,71 @@ export const WorkspacePlugin: Plugin = async (ctx) => {
 		},
 
 		// ==========================================
-		// VERIFICATION HOOKS
+		// SAFETY HOOKS
 		// ==========================================
 		hook: {
 			"tool.execute.after": async (
 				input: { tool: string; args?: unknown },
 				output: { output?: string },
 			) => {
-				// Only intercept the 'task' tool
-				if (input.tool !== "task") return;
+				if (typeof output.output !== "string") return;
 
-				// Check if this was an implementer agent task
-				const args = input.args as { subagent_type?: string } | undefined;
-				const agentType = args?.subagent_type;
-
+				// ----------------------------------------
+				// 1. Tool Output Truncator
+				// ----------------------------------------
 				if (
-					!agentType ||
-					!IMPLEMENTER_AGENTS.includes(
-						agentType as (typeof IMPLEMENTER_AGENTS)[number],
+					TRUNCATABLE_TOOLS.includes(
+						input.tool as (typeof TRUNCATABLE_TOOLS)[number],
 					)
 				) {
-					return; // Not an implementer agent, skip verification
+					const { result, truncated } = truncateOutput(output.output);
+					if (truncated) {
+						output.output = result;
+					}
 				}
 
-				// Get file changes to show what was modified
-				const fileChanges = await getGitDiffStats(directory);
+				// ----------------------------------------
+				// 2. Edit Error Recovery
+				// ----------------------------------------
+				if (input.tool.toLowerCase() === "edit") {
+					if (hasEditError(output.output)) {
+						output.output += EDIT_ERROR_REMINDER;
+					}
+				}
 
-				// Append verification reminder to the tool output
-				const reminder = buildVerificationReminder(agentType, fileChanges);
+				// ----------------------------------------
+				// 3. Empty Task Response Detector
+				// ----------------------------------------
+				if (input.tool.toLowerCase() === "task") {
+					if (isEmptyTaskResponse(output.output)) {
+						output.output = EMPTY_TASK_WARNING;
+					}
 
-				if (typeof output.output === "string") {
-					output.output = output.output + reminder;
+					// Check if this was an implementer agent task (existing verification logic)
+					const args = input.args as { subagent_type?: string } | undefined;
+					const agentType = args?.subagent_type;
+
+					if (
+						agentType &&
+						IMPLEMENTER_AGENTS.includes(
+							agentType as (typeof IMPLEMENTER_AGENTS)[number],
+						)
+					) {
+						// Get file changes to show what was modified
+						const fileChanges = await getGitDiffStats(directory);
+
+						// Append verification reminder to the tool output
+						const reminder = buildVerificationReminder(agentType, fileChanges);
+						output.output = output.output + reminder;
+					}
+
+					// ----------------------------------------
+					// 4. Anti-Polling Reminder for Background Tasks
+					// ----------------------------------------
+					const taskArgs = input.args as { background?: boolean } | undefined;
+					if (taskArgs?.background) {
+						output.output = output.output + ANTI_POLLING_REMINDER;
+					}
 				}
 			},
 		},

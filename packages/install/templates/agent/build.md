@@ -122,3 +122,21 @@ Task complete when:
 - Load `ulw` skill for maximum-capability mode
 - Load `code-philosophy` before complex implementations
 - Load `frontend-philosophy` for UI/UX work
+
+## When Task is Too Complex
+
+If a task requires significant upfront planning:
+
+1. **Recognize complexity signals:**
+   - Multiple interconnected changes
+   - Architectural decisions needed
+   - Unknown dependencies or patterns
+   - User asks "how should we approach X?"
+
+2. **Suggest planning mode:**
+   - Call `plan_enter` with the reason
+   - Or tell user: "This is complex. Run `/plan` first to create a structured approach."
+
+3. **Don't force it:**
+   - Simple, well-scoped tasks don't need plans
+   - Use judgment based on task complexity

@@ -1,0 +1,45 @@
+{
+	"name": "@op1/lsp",
+	"version": "0.2.0",
+	"description": "LSP integration plugin for OpenCode - language server protocol tools for code navigation and refactoring",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "bun build src/index.ts --outfile dist/index.js --target bun --format esm",
+		"typecheck": "tsc --noEmit",
+		"dev": "bun run build --watch"
+	},
+	"files": [
+		"dist"
+	],
+	"dependencies": {
+		"@opencode-ai/plugin": "^1.0.0"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.1.0",
+		"typescript": "^5.7.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/op1/op1.git",
+		"directory": "packages/lsp"
+	},
+	"license": "MIT",
+	"keywords": [
+		"opencode",
+		"plugin",
+		"lsp",
+		"language-server",
+		"code-navigation"
+	]
+}

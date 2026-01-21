@@ -19,3 +19,7 @@ The plan must include:
 - Task dependencies and blockers
 - Testing strategy considerations
 - Complexity estimates per phase
+
+After the plan is approved by the user:
+1. Save the plan with `plan_save`
+2. Inform the user: "Plan saved. Run `/work` to start implementation."

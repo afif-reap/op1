@@ -219,6 +219,10 @@ interface InstallOptions {
 interface PluginChoice {
 	notify: boolean;
 	workspace: boolean;
+	astGrep: boolean;
+	lsp: boolean;
+	semanticSearch: boolean;
+	codeGraph: boolean;
 }
 
 // Agent model configuration - per-agent
@@ -414,6 +418,18 @@ function mergeConfig(
 	}
 	if (pluginChoices.workspace && !existingPlugins.includes("@op1/workspace")) {
 		newPlugins.push("@op1/workspace");
+	}
+	if (pluginChoices.astGrep && !existingPlugins.includes("@op1/ast-grep")) {
+		newPlugins.push("@op1/ast-grep");
+	}
+	if (pluginChoices.lsp && !existingPlugins.includes("@op1/lsp")) {
+		newPlugins.push("@op1/lsp");
+	}
+	if (pluginChoices.semanticSearch && !existingPlugins.includes("@op1/semantic-search")) {
+		newPlugins.push("@op1/semantic-search");
+	}
+	if (pluginChoices.codeGraph && !existingPlugins.includes("@op1/code-graph")) {
+		newPlugins.push("@op1/code-graph");
 	}
 	if (newPlugins.length > 0 || existingPlugins.length > 0) {
 		base.plugin = [...existingPlugins, ...newPlugins];
@@ -673,8 +689,8 @@ export async function main() {
 		plugins: components.includes("plugins"),
 	};
 
-	// Plugin selection - workspace is always included, notifications optional
-	let pluginChoices: PluginChoice = { notify: false, workspace: true };
+	// Plugin selection - workspace is always included, others optional
+	let pluginChoices: PluginChoice = { notify: false, workspace: true, astGrep: false, lsp: false, semanticSearch: false, codeGraph: false };
 	if (options.plugins) {
 		const wantNotify = await p.confirm({
 			message: "Enable desktop notifications? (sounds, focus detection, quiet hours)",
@@ -683,6 +699,42 @@ export async function main() {
 
 		if (!p.isCancel(wantNotify)) {
 			pluginChoices.notify = wantNotify;
+		}
+
+		const wantAstGrep = await p.confirm({
+			message: "Enable AST-grep? (structural code search/replace, 25 languages)",
+			initialValue: true,
+		});
+
+		if (!p.isCancel(wantAstGrep)) {
+			pluginChoices.astGrep = wantAstGrep;
+		}
+
+		const wantLsp = await p.confirm({
+			message: "Enable LSP tools? (go-to-definition, find-references, 50+ language servers)",
+			initialValue: true,
+		});
+
+		if (!p.isCancel(wantLsp)) {
+			pluginChoices.lsp = wantLsp;
+		}
+
+		const wantSemanticSearch = await p.confirm({
+			message: "Enable semantic search? (natural language code search with embeddings)",
+			initialValue: true,
+		});
+
+		if (!p.isCancel(wantSemanticSearch)) {
+			pluginChoices.semanticSearch = wantSemanticSearch;
+		}
+
+		const wantCodeGraph = await p.confirm({
+			message: "Enable code graph? (dependency analysis, impact assessment)",
+			initialValue: true,
+		});
+
+		if (!p.isCancel(wantCodeGraph)) {
+			pluginChoices.codeGraph = wantCodeGraph;
 		}
 	}
 

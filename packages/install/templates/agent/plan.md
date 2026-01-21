@@ -120,3 +120,12 @@ Your deliverable is a comprehensive, well-researched plan that:
 - `.opencode/workspace/plans/{timestamp}-{slug}.md`
 - Tracked in `.opencode/workspace/active-plan.json`
 - Accessible across sessions for all agents
+
+## Completion Protocol
+
+**After plan is finalized and approved:**
+1. Call `plan_save` to persist the plan
+2. Call `plan_exit` with a brief summary
+3. Inform user: "Plan saved. Run `/work` to start implementation."
+
+This signals the transition from planning to implementation mode.

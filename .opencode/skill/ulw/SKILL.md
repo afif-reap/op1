@@ -35,7 +35,9 @@ TELL THE USER WHAT AGENTS YOU WILL LEVERAGE TO SATISFY THEIR REQUEST.
 - Mark complete IMMEDIATELY after each step
 - Never batch completions
 
-### Parallel Execution (DEFAULT)
+### Parallel Execution (THREE TIERS)
+
+**Tier 1: Agent-Level Parallelism**
 ```
 // Fire 3-10+ background agents simultaneously
 task(agent="explore", prompt="Find X...", background=true)
@@ -43,6 +45,45 @@ task(agent="explore", prompt="Find Y...", background=true)
 task(agent="researcher", prompt="Find Z docs...", background=true)
 // Continue working, collect with background_output when needed
 ```
+
+**Tier 2: Tool-Level Parallelism (BATCH)**
+
+Use the `batch` tool for 2-25 independent tool operations:
+
+```json
+{
+  "tool": "batch",
+  "parameters": {
+    "tool_calls": [
+      {"tool": "read", "parameters": {"filePath": "src/file1.ts"}},
+      {"tool": "read", "parameters": {"filePath": "src/file2.ts"}},
+      {"tool": "grep", "parameters": {"pattern": "import", "include": "*.ts"}},
+      {"tool": "bash", "parameters": {"command": "git status"}}
+    ]
+  }
+}
+```
+
+| ✅ GOOD TO BATCH | ❌ DO NOT BATCH |
+|------------------|-----------------|
+| Read multiple files | Tools that depend on prior output |
+| grep + glob + read combos | Sequential mutations (create → read) |
+| Multiple bash commands | The `batch` tool itself |
+| Multi-file edits (independent) | MCP/environment tools |
+| LSP tools on different files | Ordered stateful operations |
+
+**Limits**: Max 25 tools per batch. Partial failures don't stop others.
+**Impact**: 2-5x speedup for independent operations.
+
+**Tier 3: Combined (MAXIMUM THROUGHPUT)**
+```
+// Spawn agents + batch tools simultaneously
+task(agent="explore", background=true)
+task(agent="researcher", background=true)
+batch([read(5 files), grep(3 patterns), glob(2 paths)])
+```
+
+**Priority**: Batch tools FIRST when possible. Spawn agents SECOND for cognitive tasks.
 
 ### Verification Loop
 - Re-read original request after completion
@@ -73,6 +114,37 @@ task(agent="researcher", prompt="Find Z docs...", background=true)
 | **Regression** | Ensure nothing broke | Existing tests still pass |
 
 **WITHOUT evidence = NOT verified = NOT done.**
+
+### Verification Phase Batching
+
+Use batch tool during verification for efficiency:
+
+```json
+{
+  "tool": "batch",
+  "parameters": {
+    "tool_calls": [
+      {"tool": "bash", "parameters": {"command": "bun run build", "description": "Build project"}},
+      {"tool": "bash", "parameters": {"command": "bun test", "description": "Run tests"}},
+      {"tool": "bash", "parameters": {"command": "bun run typecheck", "description": "Type check"}}
+    ]
+  }
+}
+```
+
+**Verification checklist batch:**
+```json
+{
+  "tool": "batch", 
+  "parameters": {
+    "tool_calls": [
+      {"tool": "lsp_diagnostics", "parameters": {"filePath": "src/changed-file-1.ts"}},
+      {"tool": "lsp_diagnostics", "parameters": {"filePath": "src/changed-file-2.ts"}},
+      {"tool": "grep", "parameters": {"pattern": "TODO|FIXME|XXX", "include": "src/**/*.ts"}}
+    ]
+  }
+}
+```
 
 ### TDD Workflow (when test infrastructure exists)
 

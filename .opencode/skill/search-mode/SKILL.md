@@ -30,11 +30,17 @@ task(agent="researcher", prompt="Find GitHub examples...", background=true)
 
 | Tool | Purpose |
 |------|---------|
+| `search_semantic` | Natural language code search |
+| `find_similar` | Find similar code patterns |
+| `find_dependencies` | What depends on X? |
+| `call_graph` | Function caller/callee relationships |
 | `grep` | Text pattern search |
 | `glob` | File pattern matching |
 | `ast_grep_search` | Structural code patterns |
+| `lsp_goto_definition` | Jump to symbol definition |
 | `lsp_find_references` | Symbol usage across codebase |
-| `lsp_goto_definition` | Find where symbols are defined |
+| `lsp_symbols` | Document/workspace symbol search |
+| `lsp_diagnostics` | Get errors/warnings before build |
 
 ### Search Strategy
 

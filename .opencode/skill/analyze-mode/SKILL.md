@@ -31,10 +31,17 @@ While agents run, use direct tools:
 
 | Tool | Purpose |
 |------|---------|
+| `search_semantic` | Natural language code search |
+| `find_similar` | Find similar code patterns |
+| `find_dependencies` | What depends on X? |
+| `call_graph` | Function caller/callee relationships |
+| `impact_analysis` | Change risk assessment |
 | `grep` | Find specific patterns |
 | `ast_grep_search` | Structural analysis |
-| `lsp_hover` | Type information |
-| `lsp_find_references` | Usage analysis |
+| `lsp_goto_definition` | Jump to symbol definition |
+| `lsp_find_references` | Find all usages |
+| `lsp_symbols` | Document/workspace symbol search |
+| `lsp_diagnostics` | Type errors before build |
 | `git log -S` | History evolution |
 | `git blame` | Change attribution |
 

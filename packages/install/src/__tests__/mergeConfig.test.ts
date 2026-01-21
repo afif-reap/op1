@@ -18,6 +18,25 @@ function createMockMcp(id: string, toolPattern: string, agentAccess: string[]): 
 	};
 }
 
+// Default plugin choices for testing
+const DEFAULT_PLUGIN_CHOICES: PluginChoice = {
+	notify: false,
+	workspace: false,
+	astGrep: false,
+	lsp: false,
+	semanticSearch: false,
+	codeGraph: false,
+};
+
+const ENABLED_PLUGIN_CHOICES: PluginChoice = {
+	notify: true,
+	workspace: true,
+	astGrep: false,
+	lsp: false,
+	semanticSearch: false,
+	codeGraph: false,
+};
+
 describe("mergeConfig", () => {
 	const allAgents = ["build", "coder", "explore", "frontend", "oracle", "plan", "researcher", "reviewer", "scribe"];
 
@@ -26,7 +45,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -51,7 +70,7 @@ describe("mergeConfig", () => {
 			null, // existing is null (backup-replace scenario)
 			originalConfig,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -71,7 +90,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -91,7 +110,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			[],
-			{ notify: true, workspace: true },
+			ENABLED_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -113,7 +132,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			[],
-			{ notify: true, workspace: true },
+			ENABLED_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -138,7 +157,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			newMcps,
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -159,7 +178,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			newMcps,
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -178,7 +197,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			newMcps,
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -212,7 +231,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			newMcps,
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -227,7 +246,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			"anthropic/claude-sonnet-4-20250514",
 			allAgents
@@ -245,7 +264,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			"new-model",
 			allAgents
@@ -264,7 +283,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			agentModels,
 			null,
 			allAgents
@@ -292,7 +311,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			agentModels,
 			null,
 			allAgents
@@ -307,7 +326,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -325,7 +344,7 @@ describe("mergeConfig", () => {
 			existing,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -346,7 +365,7 @@ describe("mergeConfig", () => {
 			null,
 			originalConfig,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -363,7 +382,7 @@ describe("mergeConfig", () => {
 			null,
 			null,
 			[],
-			{ notify: false, workspace: false },
+			DEFAULT_PLUGIN_CHOICES,
 			{},
 			null,
 			allAgents
@@ -392,7 +411,7 @@ describe("mergeConfig", () => {
 			null, // existing is null (backup-replace)
 			originalConfig, // but we pass original to preserve provider
 			newMcps,
-			{ notify: true, workspace: true },
+			ENABLED_PLUGIN_CHOICES,
 			{ oracle: "quotio/gpt-5.2-codex" },
 			null,
 			allAgents
@@ -447,7 +466,7 @@ describe("mergeConfig", () => {
 			existing,
 			existing, // original config same as existing (merge scenario)
 			newMcps,
-			{ notify: true, workspace: true },
+			ENABLED_PLUGIN_CHOICES,
 			{}, // no agent models configured
 			"anthropic/claude-sonnet-4-20250514", // global model (won't override existing)
 			allAgents
