@@ -812,7 +812,7 @@ export async function main() {
 		if (!p.isCancel(configureModels) && configureModels) {
 			// Agent descriptions and suggested models
 			const agentPrompts: { name: string; desc: string; defaultModel: string }[] = [
-				{ name: "build", desc: "Build agent (default, writes code)", defaultModel: "proxy/claude-sonnet-4-5-thinking" },
+				{ name: "build", desc: "Build agent (default, writes code)", defaultModel: "proxy/claude-opus-4-5-thinking" },
 				{ name: "coder", desc: "Coder (atomic coding tasks)", defaultModel: "proxy/claude-opus-4-5-thinking" },
 				{ name: "frontend", desc: "Frontend (UI/UX specialist)", defaultModel: "proxy/gemini-3-pro-high" },
 				{ name: "plan", desc: "Plan (strategic planning)", defaultModel: "proxy/claude-opus-4-5-thinking" },

@@ -63,6 +63,14 @@ type(scope): description
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
+## Skills to Load
+
+Before writing prose, load these skills as needed:
+```
+skill("writing-clearly")   # Strunk's Elements of Style
+skill("humanizer")         # Remove AI writing patterns
+```
+
 ## Documentation Guidelines
 
 - Lead with the "why" before the "how"
@@ -70,6 +78,8 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 - Include code examples where helpful
 - Structure with clear headings for scannability
 - Keep paragraphs short (3-4 sentences max)
+- Apply Strunk's rules: active voice, omit needless words
+- Avoid AI patterns: puffery, -ing phrases, promotional adjectives
 
 ## FORBIDDEN ACTIONS
 

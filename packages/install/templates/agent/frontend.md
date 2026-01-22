@@ -23,6 +23,7 @@ Before any frontend work, load these skills:
 ```
 skill("frontend-philosophy")
 skill("frontend-ui-ux")
+skill("react-performance")  # For React/Next.js optimization
 ```
 
 When working from Figma designs, also load:

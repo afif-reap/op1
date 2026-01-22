@@ -104,7 +104,7 @@ Configure different models for different agents:
 ```json
 {
   "agent": {
-    "build": { "model": "anthropic/claude-sonnet-4-20250514" },
+    "build": { "model": "anthropic/claude-opus-4-20250514" },
     "explore": { "model": "anthropic/claude-haiku-3-5-20241022" },
     "oracle": { "model": "openai/gpt-4o" }
   }

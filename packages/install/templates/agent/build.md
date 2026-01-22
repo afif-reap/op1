@@ -128,6 +128,8 @@ Task complete when:
 - Load `ulw` skill for maximum-capability mode
 - Load `code-philosophy` before complex implementations
 - Load `frontend-philosophy` for UI/UX work
+- Load `brainstorming` before creative/design work
+- Load `skill-creator` when creating new skills
 
 ## When Task is Too Complex
 
