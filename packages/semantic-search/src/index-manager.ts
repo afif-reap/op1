@@ -12,13 +12,14 @@ import { join } from "path";
 import { VectorStore } from "./vector-store";
 import { chunkCode, hashContent, shouldIndexFile } from "./chunker";
 import { OpenAIEmbedder } from "./embedder";
+import { createEmbedder, detectEmbedder } from "./embedder-factory";
 import { MerkleCache } from "./merkle-cache";
 import { FileWatcher } from "./watcher";
 import type { Embedder, CodeChunk, EmbeddedChunk, SearchResult, IndexConfig, IndexStatus, FileChange } from "./types";
 
 const DEFAULT_CONFIG: IndexConfig = {
 	dbPath: ".opencode/semantic-search.db",
-	embeddingDimension: 768,
+	embeddingDimension: 384, // Default to 384 for Transformers.js MiniLM (768 for OpenAI)
 	maxChunkLines: 100,
 	chunkOverlap: 10,
 	includePatterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go", "**/*.rs"],
@@ -83,10 +84,8 @@ export class SemanticSearchIndex {
 	) {
 		this.workspaceRoot = workspaceRoot;
 		this.config = { ...DEFAULT_EXTENDED_CONFIG, ...options.config };
-		this.embedder = options.embedder ?? new OpenAIEmbedder({ 
-			dimension: this.config.embeddingDimension,
-			maxBatchSize: this.config.embeddingBatchSize,
-		});
+		// Embedder will be set during initialize() if not provided
+		this.embedder = options.embedder ?? null as unknown as Embedder;
 		this.onProgress = options.onProgress ?? null;
 		this.merkleCache = new MerkleCache(workspaceRoot);
 		
@@ -95,10 +94,36 @@ export class SemanticSearchIndex {
 	}
 
 	/**
-	 * Initialize the index and optionally start file watching
+	 * Initialize the index and optionally start file watching.
+	 * Auto-detects embedder if not provided (Transformers.js preferred, OpenAI fallback).
 	 */
 	async initialize(): Promise<void> {
 		await this.store.initialize();
+
+		// Auto-detect embedder if not provided
+		if (!this.embedder) {
+			try {
+				const config = await detectEmbedder();
+				
+				// Update dimension based on detected embedder
+				if (config.dimension !== this.config.embeddingDimension) {
+					this.config.embeddingDimension = config.dimension;
+					
+					// Recreate store with correct dimension
+					this.store.close();
+					const dbPath = join(this.workspaceRoot, this.config.dbPath);
+					this.store = new VectorStore(dbPath, config.dimension);
+					await this.store.initialize();
+				}
+				
+				this.embedder = await createEmbedder({
+					dimension: config.dimension,
+				});
+			} catch (error) {
+				const err = error as Error;
+				throw new Error(`Failed to initialize embedder: ${err.message}`);
+			}
+		}
 
 		// Load Merkle cache
 		const cachePath = join(this.workspaceRoot, this.config.cachePath);
@@ -218,11 +243,9 @@ export class SemanticSearchIndex {
 			this.store.deleteFile(filePath);
 
 			// Chunk the file
-			const startId = this.store.getNextChunkId();
 			const chunks = chunkCode(filePath, content, {
 				maxChunkLines: this.config.maxChunkLines,
 				chunkOverlap: this.config.chunkOverlap,
-				startId,
 			});
 
 			if (chunks.length === 0) return 0;
@@ -271,12 +294,22 @@ export class SemanticSearchIndex {
 			// Phase 1: Scan files
 			this.emitProgress({ phase: "scanning", current: 0, total: 0 });
 			
-			const glob = new Bun.Glob(this.config.includePatterns.join(","));
+			// Bun.Glob doesn't support comma-separated patterns, iterate each pattern
 			const files: string[] = [];
+			const seen = new Set<string>();
 
-			for await (const file of glob.scan({ cwd: this.workspaceRoot })) {
-				if (shouldIndexFile(file, this.config.includePatterns, this.config.excludePatterns)) {
-					files.push(file);
+			for (const pattern of this.config.includePatterns) {
+				const glob = new Bun.Glob(pattern);
+				for await (const file of glob.scan({ cwd: this.workspaceRoot })) {
+					// Bun.Glob handles include patterns, check excludes manually
+					const excluded = this.config.excludePatterns.some((ex) => {
+						const exGlob = new Bun.Glob(ex);
+						return exGlob.match(file);
+					});
+					if (!seen.has(file) && !excluded) {
+						seen.add(file);
+						files.push(file);
+					}
 				}
 			}
 
@@ -374,6 +407,13 @@ export class SemanticSearchIndex {
 		const dbPath = join(this.workspaceRoot, this.config.dbPath);
 		try {
 			await Bun.file(dbPath).exists() && await Bun.$`rm ${dbPath}`;
+		} catch {}
+
+		// Clear Merkle cache to force re-indexing all files
+		const cachePath = join(this.workspaceRoot, this.config.cachePath);
+		this.merkleCache = new MerkleCache(this.workspaceRoot);
+		try {
+			await Bun.file(cachePath).exists() && await Bun.$`rm ${cachePath}`;
 		} catch {}
 
 		// Reinitialize and rebuild

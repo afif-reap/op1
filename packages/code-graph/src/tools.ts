@@ -10,15 +10,27 @@ import type { ImpactAnalysis } from "./types";
 
 // Singleton index instance (initialized by plugin)
 let graphIndex: CodeGraphIndex | null = null;
+let autoBuilt = false;
 
 export function setGraphIndex(index: CodeGraphIndex): void {
 	graphIndex = index;
+	autoBuilt = false; // Reset on new index
 }
 
-function getIndex(): CodeGraphIndex {
+async function getIndex(): Promise<CodeGraphIndex> {
 	if (!graphIndex) {
 		throw new Error("Code graph not initialized. Ensure @op1/code-graph plugin is configured.");
 	}
+	
+	// Auto-build on first use if graph is empty
+	if (!autoBuilt) {
+		const stats = graphIndex.getStats();
+		if (stats.fileCount === 0) {
+			await graphIndex.rebuildGraph();
+		}
+		autoBuilt = true;
+	}
+	
 	return graphIndex;
 }
 
@@ -67,7 +79,7 @@ export const find_dependents: ToolDefinition = tool({
 	},
 	execute: async (args) => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const dependents = index.findDependents(args.filePath, args.transitive ?? false);
 
 			if (dependents.length === 0) {
@@ -96,7 +108,7 @@ export const find_dependencies: ToolDefinition = tool({
 	},
 	execute: async (args) => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const dependencies = index.findDependencies(args.filePath);
 
 			if (dependencies.length === 0) {
@@ -125,7 +137,7 @@ export const impact_analysis: ToolDefinition = tool({
 	},
 	execute: async (args) => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const impact = index.analyzeImpact(args.filePath);
 			return formatImpact(impact);
 		} catch (e) {
@@ -142,7 +154,7 @@ export const graph_status: ToolDefinition = tool({
 	args: {},
 	execute: async () => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const stats = index.getStats();
 
 			const lines = [
@@ -168,7 +180,7 @@ export const graph_rebuild: ToolDefinition = tool({
 	args: {},
 	execute: async () => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const result = await index.rebuildGraph();
 			return `Graph rebuilt: ${result.filesIndexed} files indexed, ${result.edgesCreated} dependencies found.`;
 		} catch (e) {

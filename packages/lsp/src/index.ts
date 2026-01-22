@@ -13,13 +13,16 @@
  * - lsp_rename: Rename symbol across files
  */
 
-// Re-export all modules
-export * from "./types";
-export * from "./constants";
-export * from "./config";
-export * from "./client";
-export * from "./utils";
-export * from "./tools";
-
-// Export plugin
+// Export plugin (default export for OpenCode plugin loader)
 export { LspPlugin } from "./plugin";
+export { default } from "./plugin";
+
+// Re-export types only (no classes)
+export type {
+	LSPServerConfig,
+	Position,
+	Range,
+	Location,
+	SymbolInfo,
+	Diagnostic,
+} from "./types";

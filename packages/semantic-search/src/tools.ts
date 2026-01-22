@@ -10,16 +10,24 @@ import type { SearchResult } from "./types";
 
 // Singleton index instance (initialized by plugin)
 let searchIndex: SemanticSearchIndex | null = null;
+let ensureIndexFn: (() => Promise<SemanticSearchIndex>) | null = null;
 
-export function setSearchIndex(index: SemanticSearchIndex): void {
+export function setSearchIndex(index: SemanticSearchIndex | null): void {
 	searchIndex = index;
 }
 
-function getIndex(): SemanticSearchIndex {
-	if (!searchIndex) {
-		throw new Error("Semantic search index not initialized. Ensure @op1/semantic-search plugin is configured.");
+export function setEnsureIndex(fn: () => Promise<SemanticSearchIndex>): void {
+	ensureIndexFn = fn;
+}
+
+async function getIndex(): Promise<SemanticSearchIndex> {
+	if (searchIndex) {
+		return searchIndex;
 	}
-	return searchIndex;
+	if (ensureIndexFn) {
+		return ensureIndexFn();
+	}
+	throw new Error("Semantic search index not initialized. Ensure @op1/semantic-search plugin is configured.");
 }
 
 function formatSearchResult(result: SearchResult): string {
@@ -44,7 +52,7 @@ export const search_semantic: ToolDefinition = tool({
 	},
 	execute: async (args) => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const results = await index.search(args.query, {
 				limit: args.limit ?? 10,
 				filePath: args.filePath,
@@ -79,7 +87,7 @@ export const find_similar: ToolDefinition = tool({
 				return "Error: Provide either 'code' snippet or 'filePath' to find similar code.";
 			}
 
-			const index = getIndex();
+			const index = await getIndex();
 			let results: SearchResult[];
 
 			if (args.code) {
@@ -114,7 +122,7 @@ export const semantic_status: ToolDefinition = tool({
 	args: {},
 	execute: async () => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			const status = index.getStatus();
 
 			const lines = [
@@ -145,7 +153,7 @@ export const semantic_reindex: ToolDefinition = tool({
 	},
 	execute: async (args) => {
 		try {
-			const index = getIndex();
+			const index = await getIndex();
 			
 			if (args.force) {
 				await index.rebuildIndex();

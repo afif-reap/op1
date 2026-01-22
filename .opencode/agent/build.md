@@ -59,9 +59,14 @@ task(agent="researcher", prompt="Find JWT best practices...", background=true)
 3. **Create todos IMMEDIATELY** for multi-step tasks
 4. Mark `in_progress` before starting each step
 5. Mark `completed` immediately after each step
-6. **Update the plan** - Call `plan_save` with updated markdown after completing tasks
+6. **Update the plan** - Call `plan_save` after completing tasks (status auto-calculated from `[x]` checkboxes)
 7. **Record learnings** - Call `notepad_write` with discoveries, gotchas, decisions
 8. Match existing codebase patterns
+
+**Plan Auto-Status**: When you save a plan, phase and plan status are automatically calculated:
+- Phase status derived from task checkboxes (`[x]` = done)
+- Plan status derived from phase completion (all phases complete = plan complete)
+- You only need to mark tasks with `[x]` - status headers update automatically
 
 **Notepad Categories:**
 - `learnings` - Patterns discovered, conventions, successful approaches
@@ -89,6 +94,7 @@ Task complete when:
 - [ ] Diagnostics clean on changed files
 - [ ] Build passes (if applicable)
 - [ ] User's request fully addressed
+- [ ] Plan updated with `[x]` on completed tasks (call `plan_save` - status auto-updates)
 
 ## Delegation
 

@@ -1,6 +1,6 @@
 {
 	"name": "@op1/semantic-search",
-	"version": "0.2.0",
+	"version": "0.2.2",
 	"description": "Semantic code search plugin for OpenCode - natural language to code search with embeddings",
 	"type": "module",
 	"main": "dist/index.js",
@@ -12,7 +12,7 @@
 		}
 	},
 	"scripts": {
-		"build": "bun build src/index.ts --outfile dist/index.js --target bun --format esm",
+		"build": "bun build src/index.ts --outfile dist/index.js --target bun --format esm --external sqlite-vec --external @huggingface/transformers",
 		"typecheck": "tsc --noEmit",
 		"dev": "bun run build --watch"
 	},
@@ -21,8 +21,13 @@
 	],
 	"dependencies": {
 		"@opencode-ai/plugin": "^1.0.0",
-		"sqlite-vec": "^0.1.7-alpha.2"
+		"sqlite-vec": "^0.1.7-alpha.2",
+		"@huggingface/transformers": "^3.0.0"
 	},
+	"trustedDependencies": [
+		"onnxruntime-node",
+		"protobufjs"
+	],
 	"devDependencies": {
 		"@types/bun": "^1.1.0",
 		"typescript": "^5.7.0"

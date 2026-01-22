@@ -627,7 +627,47 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 				return
 			}
 
-			// Handle permission requests
+			// Handle permission requests (file system access, bash commands, etc.)
+			if (event.type === "permission.asked") {
+				if (isQuietHours(config.quietHours)) return
+				if (await isTerminalFocused(terminalInfo)) return
+
+				// Extract permission details for a more informative notification
+				const permission = props?.permission as string | undefined
+				const patterns = props?.patterns as string[] | undefined
+				const firstPattern = patterns?.[0]?.slice(0, 60) || ""
+				
+				// Create descriptive message based on permission type
+				let message = "OpenCode needs your permission"
+				if (permission === "external_directory" && firstPattern) {
+					message = `Access to: ${firstPattern}`
+				} else if (permission === "bash" && firstPattern) {
+					message = `Run: ${firstPattern}`
+				} else if (permission && firstPattern) {
+					message = `${permission}: ${firstPattern}`
+				} else if (permission) {
+					message = `Permission: ${permission}`
+				}
+
+				await sendDesktopNotification(
+					ctx,
+					platform,
+					"Permission Required",
+					message,
+					terminalInfo,
+					config.sounds.permission,
+				)
+				if (platform !== "darwin") {
+					await playSound(ctx, platform, config.sounds.permission)
+				}
+
+				if (config.showToasts) {
+					await showInAppToast(ctx, "Permission Required", message, "warning")
+				}
+				return
+			}
+
+			// Handle permission config updates
 			if (event.type === "permission.updated") {
 				if (isQuietHours(config.quietHours)) return
 				if (await isTerminalFocused(terminalInfo)) return
@@ -650,6 +690,33 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 				return
 			}
 
+			// Handle question asked (LLM asking user a question)
+			if (event.type === "question.asked") {
+				if (isQuietHours(config.quietHours)) return
+				if (await isTerminalFocused(terminalInfo)) return
+
+				// Extract first question text if available
+				const questions = props?.questions as Array<{ question?: string }> | undefined
+				const questionText = questions?.[0]?.question?.slice(0, 80) || "OpenCode has a question"
+
+				await sendDesktopNotification(
+					ctx,
+					platform,
+					"Question for you",
+					questionText,
+					terminalInfo,
+					config.sounds.permission,
+				)
+				if (platform !== "darwin") {
+					await playSound(ctx, platform, config.sounds.permission)
+				}
+
+				if (config.showToasts) {
+					await showInAppToast(ctx, "Question", questionText, "warning")
+				}
+				return
+			}
+
 			// Cleanup on session delete
 			if (event.type === "session.deleted") {
 				const sessionID = props?.info?.id as string | undefined
@@ -665,5 +732,6 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 	}
 }
 
-// Export functions for testing
-export { isQuietHours, detectTerminal };
+// ONLY export the plugin - OpenCode calls all exports as functions
+// For testing, import directly from the module internals
+export { isQuietHours };

@@ -1,6 +1,6 @@
 {
 	"name": "@op1/workspace",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Project-scoped plan management plugin for OpenCode - plans, notepads, verification hooks",
 	"type": "module",
 	"main": "dist/index.js",
@@ -12,7 +12,7 @@
 		}
 	},
 	"scripts": {
-		"build": "bun build src/index.ts --outfile dist/index.js --target bun --format esm",
+		"build": "bun build src/index.ts --outfile dist/index.js --target bun --format esm --external zod",
 		"typecheck": "tsc --noEmit",
 		"dev": "bun run build --watch"
 	},

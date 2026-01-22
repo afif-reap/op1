@@ -1,6 +1,6 @@
 {
 	"name": "@op1/ast-grep",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "AST-aware code search and replace tools for OpenCode - powered by ast-grep",
 	"type": "module",
 	"main": "dist/index.js",
@@ -20,9 +20,7 @@
 		"dist"
 	],
 	"dependencies": {
-		"@opencode-ai/plugin": "^1.0.0"
-	},
-	"optionalDependencies": {
+		"@opencode-ai/plugin": "^1.0.0",
 		"@ast-grep/cli": "^0.40.0"
 	},
 	"devDependencies": {

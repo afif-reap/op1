@@ -272,12 +272,15 @@ export class MerkleCache {
 		const modified: string[] = [];
 		const unchanged: string[] = [];
 
+		// Capture existing cache state BEFORE hashing (which updates the cache)
+		const previousHashes = new Map(this.fileHashes);
+
 		const currentHashes = await this.hashFiles(filePaths);
 
 		for (const [filePath, hash] of currentHashes) {
 			if (hash === null) continue; // File doesn't exist or can't be read
 
-			const cached = this.fileHashes.get(filePath);
+			const cached = previousHashes.get(filePath);
 			if (!cached) {
 				added.push(filePath);
 			} else if (cached.hash !== hash) {

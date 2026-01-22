@@ -11,12 +11,16 @@
  * - graph_rebuild: Rebuild the dependency graph
  */
 
-// Re-export all modules
-export * from "./types";
-export * from "./parser";
-export * from "./graph-store";
-export * from "./index-manager";
-export * from "./tools";
-
-// Export plugin
+// Export plugin (default export for OpenCode plugin loader)
 export { CodeGraphPlugin } from "./plugin";
+export { default } from "./plugin";
+
+// Re-export types only (no classes)
+export type {
+	ImportInfo,
+	ExportInfo,
+	GraphNode,
+	GraphEdge,
+	ImpactAnalysis,
+	FileDependencies,
+} from "./types";

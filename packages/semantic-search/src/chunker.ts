@@ -183,16 +183,14 @@ export function chunkCode(
 	options: {
 		maxChunkLines?: number;
 		chunkOverlap?: number;
-		startId?: number;
 	} = {}
 ): CodeChunk[] {
-	const { maxChunkLines = 100, chunkOverlap = 10, startId = 1 } = options;
+	const { maxChunkLines = 100, chunkOverlap = 10 } = options;
 
 	const language = getLanguage(filePath);
 	const lines = content.split("\n");
 	const contentHash = hashContent(content);
 	const chunks: CodeChunk[] = [];
-	let chunkId = startId;
 
 	// Find symbol boundaries
 	const boundaries = findSymbolBoundaries(content, language);
@@ -206,7 +204,6 @@ export function chunkCode(
 
 			if (chunkContent.trim()) {
 				chunks.push({
-					id: chunkId++,
 					filePath,
 					startLine: startLine + 1,
 					endLine: endLine + 1,
@@ -238,7 +235,6 @@ export function chunkCode(
 
 			if (chunkContent.trim()) {
 				chunks.push({
-					id: chunkId++,
 					filePath,
 					startLine: startLine + 1,
 					endLine: endLine + 1,

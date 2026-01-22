@@ -14,18 +14,28 @@
  * - Debounced file watching for automatic updates
  * - Parallel file indexing with configurable concurrency
  * - Batch embedding with LRU cache (100 chunks per request)
+ * 
+ * Embedding providers (auto-detected):
+ * - Transformers.js (local, no API key) - PREFERRED
+ * - OpenAI-compatible (requires OPENAI_API_KEY)
  */
 
-// Re-export all modules
-export * from "./types";
-export * from "./chunker";
-export * from "./embedder";
-export * from "./vector-store";
-export * from "./index-manager";
-export * from "./merkle-cache";
-export * from "./watcher";
-export * from "./benchmark";
-export * from "./tools";
-
-// Export plugin
+// Export plugin (default export for OpenCode plugin loader)
 export { SemanticSearchPlugin } from "./plugin";
+export { default } from "./plugin";
+
+// Re-export types only (no classes that could be mistakenly called as functions)
+// IMPORTANT: OpenCode plugin loader iterates all exports and tries to call them.
+// Exporting classes at the top level causes "Cannot call a class constructor without |new|" errors.
+export type { SqliteVecError } from "./vector-store";
+export type { EmbedderFactoryOptions, EmbedderConfig, EmbedderType } from "./embedder-factory";
+export type { TransformersEmbedderOptions } from "./transformers-embedder";
+export type {
+	Embedder,
+	CodeChunk,
+	EmbeddedChunk,
+	SearchResult,
+	IndexConfig,
+	IndexStatus,
+	FileChange,
+} from "./types";
