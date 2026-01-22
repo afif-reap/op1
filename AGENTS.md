@@ -176,7 +176,7 @@ op1/
 │   │   └── src/index.ts
 │   └── workspace/      # @op1/workspace - Workspace tools
 │       └── src/index.ts
-├── .opencode/          # Config templates (copied by installer)
+├── templates/          # Config templates (copied by installer)
 │   ├── agent/          # 9 agent definitions
 │   ├── command/        # 6 slash commands
 │   └── skill/          # 17 loadable skills
@@ -211,11 +211,11 @@ Workspace management plugin with:
 - Verification hooks
 - Session state persistence
 
-## Templates (.opencode/)
+## Templates (templates/)
 
 Templates are copied to user's `~/.config/opencode/` by the installer.
 
-**Keep in sync:** When modifying templates in `.opencode/`, also update `packages/create/templates/`.
+**Location:** `templates/` at repo root (agents, commands, skills).
 
 ## Dependencies
 

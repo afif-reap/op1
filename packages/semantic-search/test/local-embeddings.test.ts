@@ -3,7 +3,8 @@
  * Run: bun run test/local-embeddings.test.ts
  */
 
-import { TransformersEmbedder, isTransformersAvailable, detectEmbedder, createEmbedder } from "../src";
+import { TransformersEmbedder, isTransformersAvailable } from "../src/transformers-embedder";
+import { detectEmbedder, createEmbedder } from "../src/embedder-factory";
 
 async function main() {
 	console.log("=== Local Embeddings Test ===\n");

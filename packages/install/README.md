@@ -97,7 +97,7 @@ If you prefer manual setup:
 git clone https://github.com/anthropics/op1.git
 
 # Copy templates to your config
-cp -r op1/.opencode/* ~/.config/opencode/
+cp -r op1/templates/* ~/.config/opencode/
 ```
 
 ## License
