@@ -80,7 +80,7 @@ export const find_dependents: ToolDefinition = tool({
 	execute: async (args) => {
 		try {
 			const index = await getIndex();
-			const dependents = index.findDependents(args.filePath, args.transitive ?? false);
+			const dependents = await index.findDependents(args.filePath, args.transitive ?? false);
 
 			if (dependents.length === 0) {
 				return `No files depend on ${args.filePath}`;
@@ -109,7 +109,7 @@ export const find_dependencies: ToolDefinition = tool({
 	execute: async (args) => {
 		try {
 			const index = await getIndex();
-			const dependencies = index.findDependencies(args.filePath);
+			const dependencies = await index.findDependencies(args.filePath);
 
 			if (dependencies.length === 0) {
 				return `${args.filePath} has no local dependencies`;
@@ -138,7 +138,7 @@ export const impact_analysis: ToolDefinition = tool({
 	execute: async (args) => {
 		try {
 			const index = await getIndex();
-			const impact = index.analyzeImpact(args.filePath);
+			const impact = await index.analyzeImpact(args.filePath);
 			return formatImpact(impact);
 		} catch (e) {
 			return `Error: ${e instanceof Error ? e.message : String(e)}`;

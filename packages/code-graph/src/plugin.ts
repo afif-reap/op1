@@ -24,12 +24,16 @@ import {
  * - impact_analysis: Analyze change impact
  * - graph_status: Get graph statistics
  * - graph_rebuild: Rebuild the graph
+ *
+ * Auto-refresh is enabled by default - the graph automatically
+ * checks for file changes before queries (with 30s cooldown).
  */
 export const CodeGraphPlugin: Plugin = async (ctx) => {
 	const { directory } = ctx;
 
 	// Initialize the graph index
 	const index = new CodeGraphIndex(directory);
+	await index.initialize();
 
 	// Set the global index for tools
 	setGraphIndex(index);

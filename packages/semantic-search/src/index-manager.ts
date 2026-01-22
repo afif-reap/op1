@@ -40,6 +40,12 @@ export interface ExtendedIndexConfig extends IndexConfig {
 	watcherDebounceMs: number;
 	/** Path for Merkle cache file */
 	cachePath: string;
+	/** Enable auto-refresh on query - checks for changes before search (default: true) */
+	autoRefresh: boolean;
+	/** Max files to check during auto-refresh before skipping (default: 10000) */
+	autoRefreshMaxFiles: number;
+	/** Cooldown between auto-refresh checks in ms (default: 30000) */
+	autoRefreshCooldownMs: number;
 }
 
 const DEFAULT_EXTENDED_CONFIG: ExtendedIndexConfig = {
@@ -49,6 +55,9 @@ const DEFAULT_EXTENDED_CONFIG: ExtendedIndexConfig = {
 	enableWatcher: false,
 	watcherDebounceMs: 500,
 	cachePath: ".opencode/semantic-search-cache.json",
+	autoRefresh: true,
+	autoRefreshMaxFiles: 10000,
+	autoRefreshCooldownMs: 30000,
 };
 
 /**
@@ -73,6 +82,7 @@ export class SemanticSearchIndex {
 	private merkleCache: MerkleCache;
 	private watcher: FileWatcher | null = null;
 	private onProgress: ((progress: IndexProgress) => void) | null = null;
+	private lastRefreshCheck: number = 0;
 
 	constructor(
 		workspaceRoot: string,
@@ -183,12 +193,105 @@ export class SemanticSearchIndex {
 	}
 
 	/**
+	 * Ensure index is fresh by checking for file changes.
+	 * Uses cooldown to prevent excessive checks on rapid queries.
+	 * Only runs if autoRefresh is enabled.
+	 */
+	async ensureFresh(): Promise<{ checked: boolean; updated: boolean; filesChanged: number }> {
+		// Skip if auto-refresh disabled
+		if (!this.config.autoRefresh) {
+			return { checked: false, updated: false, filesChanged: 0 };
+		}
+
+		// Skip if already indexing
+		if (this.isIndexing) {
+			return { checked: false, updated: false, filesChanged: 0 };
+		}
+
+		// Check cooldown
+		const now = Date.now();
+		if (now - this.lastRefreshCheck < this.config.autoRefreshCooldownMs) {
+			return { checked: false, updated: false, filesChanged: 0 };
+		}
+
+		this.lastRefreshCheck = now;
+
+		try {
+			// Scan files matching patterns
+			const files: string[] = [];
+			const seen = new Set<string>();
+
+			for (const pattern of this.config.includePatterns) {
+				const glob = new Bun.Glob(pattern);
+				for await (const file of glob.scan({ cwd: this.workspaceRoot })) {
+					// Check excludes
+					const excluded = this.config.excludePatterns.some((ex) => {
+						const exGlob = new Bun.Glob(ex);
+						return exGlob.match(file);
+					});
+					if (!seen.has(file) && !excluded) {
+						seen.add(file);
+						files.push(file);
+					}
+
+					// Skip if too many files (large repo safeguard)
+					if (files.length > this.config.autoRefreshMaxFiles) {
+						return { checked: true, updated: false, filesChanged: 0 };
+					}
+				}
+			}
+
+			// Use Merkle cache to find changes (uses mtime+size fast path)
+			// IMPORTANT: findChangedFiles updates the cache as a side effect,
+			// so we must index the detected files directly, not call updateIndex()
+			const { added, modified } = await this.merkleCache.findChangedFiles(files);
+			const currentFiles = new Set(files);
+			const deleted = this.merkleCache.findDeletedFiles(currentFiles);
+
+			const totalChanges = added.length + modified.length + deleted.length;
+
+			if (totalChanges === 0) {
+				return { checked: true, updated: false, filesChanged: 0 };
+			}
+
+			// Index changed files directly (don't call updateIndex which would re-scan)
+			this.isIndexing = true;
+			try {
+				// Handle deleted files
+				for (const file of deleted) {
+					this.store.deleteFile(file);
+					this.merkleCache.removeFile(file);
+				}
+
+				// Index added and modified files
+				const filesToIndex = [...added, ...modified];
+				await this.indexFilesParallel(filesToIndex);
+
+				// Save Merkle cache
+				const cachePath = join(this.workspaceRoot, this.config.cachePath);
+				await this.merkleCache.save(cachePath);
+			} finally {
+				this.isIndexing = false;
+			}
+
+			return { checked: true, updated: true, filesChanged: totalChanges };
+		} catch (e) {
+			// Don't fail queries due to refresh errors
+			console.error("Auto-refresh check failed:", e);
+			return { checked: true, updated: false, filesChanged: 0 };
+		}
+	}
+
+	/**
 	 * Search for code using natural language
 	 */
 	async search(
 		query: string,
 		options: { limit?: number; filePath?: string } = {}
 	): Promise<SearchResult[]> {
+		// Auto-refresh if enabled
+		await this.ensureFresh();
+
 		const queryEmbedding = await this.embedder.embed(query);
 		return this.store.search(queryEmbedding, options.limit ?? 10, options.filePath);
 	}
@@ -200,6 +303,9 @@ export class SemanticSearchIndex {
 		code: string,
 		options: { limit?: number } = {}
 	): Promise<SearchResult[]> {
+		// Auto-refresh if enabled
+		await this.ensureFresh();
+
 		const codeEmbedding = await this.embedder.embed(code);
 		return this.store.search(codeEmbedding, options.limit ?? 5);
 	}
@@ -212,6 +318,9 @@ export class SemanticSearchIndex {
 		line: number,
 		options: { limit?: number } = {}
 	): Promise<SearchResult[]> {
+		// Auto-refresh if enabled
+		await this.ensureFresh();
+
 		const absolutePath = join(this.workspaceRoot, filePath);
 		const content = await Bun.file(absolutePath).text();
 		const lines = content.split("\n");
@@ -221,7 +330,7 @@ export class SemanticSearchIndex {
 		const end = Math.min(lines.length, line + 5);
 		const context = lines.slice(start, end).join("\n");
 
-		return this.findSimilar(context, options);
+		return this.findSimilar(context, { ...options, skipRefresh: true } as { limit?: number });
 	}
 
 	/**

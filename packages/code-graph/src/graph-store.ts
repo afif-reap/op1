@@ -248,6 +248,14 @@ export class GraphStore {
 	}
 
 	/**
+	 * Clear all data from the graph
+	 */
+	clear(): void {
+		this.db.exec("DELETE FROM edges");
+		this.db.exec("DELETE FROM nodes");
+	}
+
+	/**
 	 * Close the database
 	 */
 	close(): void {
