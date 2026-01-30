@@ -1,0 +1,61 @@
+{
+	"name": "@op1/code-intel",
+	"version": "0.1.0",
+	"description": "Semantic code graph engine - AST chunking, LSP relationships, vector embeddings for code intelligence",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "bun build src/index.ts --outfile dist/index.js --target bun --format esm --external sqlite-vec --external @huggingface/transformers --external tree-sitter --external tree-sitter-typescript --external tree-sitter-python --external graphology --external graphology-metrics",
+		"typecheck": "tsc --noEmit",
+		"dev": "bun run build --watch",
+		"test": "bun test"
+	},
+	"files": [
+		"dist"
+	],
+	"dependencies": {
+		"@opencode-ai/plugin": "^1.0.0",
+		"sqlite-vec": "^0.1.7-alpha.2",
+		"@huggingface/transformers": "^3.0.0",
+		"tree-sitter": "^0.22.4",
+		"tree-sitter-typescript": "^0.23.2",
+		"tree-sitter-python": "^0.23.6",
+		"graphology": "^0.25.4",
+		"graphology-metrics": "^2.3.0"
+	},
+	"trustedDependencies": [
+		"onnxruntime-node",
+		"protobufjs",
+		"tree-sitter"
+	],
+	"devDependencies": {
+		"@types/bun": "^1.1.0",
+		"typescript": "^5.7.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/op1/op1.git",
+		"directory": "packages/code-intel"
+	},
+	"license": "MIT",
+	"keywords": [
+		"opencode",
+		"plugin",
+		"code-intelligence",
+		"semantic-search",
+		"code-graph",
+		"embeddings",
+		"ast",
+		"lsp"
+	]
+}
