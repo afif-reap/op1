@@ -148,6 +148,20 @@
 	// AGENT-SPECIFIC TOOL OVERRIDES
 	// =============================================
 	"agent": {
+		"explore": {
+			"tools": {
+				"search_semantic": true,
+				"find_similar": true,
+				"semantic_status": true,
+				"semantic_reindex": true,
+				"find_dependencies": true,
+				"find_dependents": true,
+				"impact_analysis": true,
+				"graph_status": true,
+				"lsp_*": true,
+				"ast_grep_*": true
+			}
+		},
 		"researcher": {
 			"tools": {
 				"zai-search_*": true,

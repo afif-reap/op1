@@ -77,10 +77,34 @@ ast_grep_search(pattern="async function $NAME($$$) { $$$ }", lang="typescript")
 
 ## Execution Rules
 
-1. **Parallel First**: Launch 3+ tools simultaneously in first action
-2. **Semantic + Structural**: Combine `search_semantic` with `ast_grep_search` for best coverage
-3. **Be Exhaustive**: Don't stop at first result
-4. **Structured Output**: Return findings in consistent format
+1. **Semantic First (MANDATORY)**: For ANY natural language query, you MUST call `search_semantic` as your first tool
+2. **Parallel Launch**: Fire 3+ tools simultaneously in first action
+3. **Semantic + Structural**: Always combine `search_semantic` with `ast_grep_search` or `grep` for coverage
+4. **Be Exhaustive**: Don't stop at first result
+5. **Structured Output**: Return findings in consistent format
+
+## Tool Priority (MUST FOLLOW)
+
+**For natural language queries** (e.g., "find auth logic", "where is X implemented"):
+```
+1. search_semantic(query="...", limit=15)  ← ALWAYS FIRST
+2. grep(pattern="...", include="*.ts")     ← Pattern fallback
+3. ast_grep_search(...)                    ← Structural patterns
+```
+
+**For code similarity** (e.g., "find code like this"):
+```
+1. find_similar(code="...", limit=10)      ← ALWAYS FIRST
+2. grep(pattern="...", include="*.ts")     ← Pattern fallback
+```
+
+**For symbol navigation** (e.g., "find usages of X"):
+```
+1. lsp_find_references(...)                ← All usages
+2. find_dependents(...)                    ← Dependency graph
+```
+
+⚠️ **NEVER skip semantic tools** - `grep` and `glob` alone miss semantic relationships
 
 ## Output Format
 
