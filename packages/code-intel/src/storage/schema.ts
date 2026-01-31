@@ -10,7 +10,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
 // Current schema version - increment when schema changes
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Embedding model ID - change triggers re-embedding
 export const EMBEDDING_MODEL_ID = "microsoft/unixcoder-base";
@@ -131,7 +131,54 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts_symbols USING fts5(
 CREATE TABLE IF NOT EXISTS js_vectors (
     symbol_id TEXT PRIMARY KEY,
     embedding BLOB NOT NULL,
+    granularity TEXT NOT NULL DEFAULT 'symbol',
     updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_js_vectors_granularity ON js_vectors(granularity);
+
+-- Chunks table (for multi-granularity indexing)
+CREATE TABLE IF NOT EXISTS chunks (
+    id TEXT PRIMARY KEY,
+    file_path TEXT NOT NULL,
+    start_line INTEGER NOT NULL,
+    end_line INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    chunk_type TEXT NOT NULL,
+    parent_symbol_id TEXT,
+    language TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (parent_symbol_id) REFERENCES symbols(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON chunks(file_path);
+CREATE INDEX IF NOT EXISTS idx_chunks_branch ON chunks(branch);
+CREATE INDEX IF NOT EXISTS idx_chunks_parent ON chunks(parent_symbol_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_file_branch ON chunks(file_path, branch);
+
+-- File contents table (for file-level search)
+CREATE TABLE IF NOT EXISTS file_contents (
+    file_path TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    language TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (file_path, branch)
+);
+
+CREATE INDEX IF NOT EXISTS idx_file_contents_branch ON file_contents(branch);
+
+-- Unified FTS5 table for multi-granularity keyword search
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_content USING fts5(
+    content_id,
+    content_type,
+    file_path,
+    name,
+    content,
+    tokenize = 'trigram'
 );
 `;
 
@@ -147,12 +194,58 @@ interface Migration {
 
 const MIGRATIONS: Migration[] = [
 	// Version 1 is the initial schema - no migration needed
-	// Add future migrations here:
-	// {
-	//   version: 2,
-	//   description: "Add some_column to symbols",
-	//   sql: "ALTER TABLE symbols ADD COLUMN some_column TEXT;"
-	// }
+	// Version 2: Multi-granularity indexing support
+	{
+		version: 2,
+		description: "Add multi-granularity indexing tables (chunks, file_contents, fts_content)",
+		sql: `
+			-- Add granularity column to js_vectors
+			ALTER TABLE js_vectors ADD COLUMN granularity TEXT NOT NULL DEFAULT 'symbol';
+			CREATE INDEX IF NOT EXISTS idx_js_vectors_granularity ON js_vectors(granularity);
+
+			-- Chunks table
+			CREATE TABLE IF NOT EXISTS chunks (
+				id TEXT PRIMARY KEY,
+				file_path TEXT NOT NULL,
+				start_line INTEGER NOT NULL,
+				end_line INTEGER NOT NULL,
+				content TEXT NOT NULL,
+				chunk_type TEXT NOT NULL,
+				parent_symbol_id TEXT,
+				language TEXT NOT NULL,
+				content_hash TEXT NOT NULL,
+				branch TEXT NOT NULL,
+				updated_at INTEGER NOT NULL,
+				FOREIGN KEY (parent_symbol_id) REFERENCES symbols(id) ON DELETE SET NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON chunks(file_path);
+			CREATE INDEX IF NOT EXISTS idx_chunks_branch ON chunks(branch);
+			CREATE INDEX IF NOT EXISTS idx_chunks_parent ON chunks(parent_symbol_id);
+			CREATE INDEX IF NOT EXISTS idx_chunks_file_branch ON chunks(file_path, branch);
+
+			-- File contents table
+			CREATE TABLE IF NOT EXISTS file_contents (
+				file_path TEXT NOT NULL,
+				branch TEXT NOT NULL,
+				content TEXT NOT NULL,
+				content_hash TEXT NOT NULL,
+				language TEXT NOT NULL,
+				updated_at INTEGER NOT NULL,
+				PRIMARY KEY (file_path, branch)
+			);
+			CREATE INDEX IF NOT EXISTS idx_file_contents_branch ON file_contents(branch);
+
+			-- Unified FTS5 table
+			CREATE VIRTUAL TABLE IF NOT EXISTS fts_content USING fts5(
+				content_id,
+				content_type,
+				file_path,
+				name,
+				content,
+				tokenize = 'trigram'
+			);
+		`,
+	},
 ];
 
 // ============================================================================
