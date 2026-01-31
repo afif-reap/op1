@@ -8,7 +8,8 @@
 
 import type { Embedder } from "./embedder";
 
-const EMBEDDING_DIM = 768;
+// Match all-MiniLM-L6-v2 dimension (384) for consistency
+const EMBEDDING_DIM = 384;
 
 /**
  * Simple hash function for strings
