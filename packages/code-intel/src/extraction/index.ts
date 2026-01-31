@@ -31,3 +31,7 @@ export type {
 	ImportInfo,
 	CallReference,
 } from "./ast-inference";
+
+export { createChunker, generateChunkId, generateContentHash as generateChunkContentHash } from "./chunker";
+export type { Chunker, ChunkerConfig } from "./chunker";
+export { DEFAULT_CHUNKER_CONFIG } from "./chunker";
