@@ -25,3 +25,51 @@ export {
 	type EdgeDiff,
 	type DiffStatus,
 } from "./branch-diff";
+
+export {
+	createMultiGranularSearch,
+	createEnhancedMultiGranularSearch,
+	type MultiGranularSearch,
+	type MultiGranularSearchDeps,
+	type MultiGranularSearchOptions,
+	type MultiGranularResult,
+	type EnhancedMultiGranularSearch,
+	type EnhancedMultiGranularSearchDeps,
+	type EnhancedSearchOptions,
+	type EnhancedSearchResult,
+} from "./multi-granular-search";
+
+export {
+	createQueryRewriter,
+	createHyDERewriter,
+	type QueryRewriter,
+	type QueryRewriterConfig,
+	type RewrittenQuery,
+	type HyDERewriter,
+} from "./query-rewriter";
+
+export {
+	createSimpleReranker,
+	createBM25Reranker,
+	createCompositeReranker,
+	type Reranker,
+	type RerankItem,
+	type RerankResult,
+	type RerankOptions,
+} from "./reranker";
+
+export {
+	createContextCache,
+	createEmbeddingCache,
+	generateCacheKey,
+	type ContextCache,
+	type ContextCacheConfig,
+	type ContextCacheStats,
+	type EmbeddingCache,
+} from "./context-cache";
+
+export {
+	createSmartQuery,
+	type SmartQuery,
+	type SmartQueryOptions,
+} from "./smart-query";
