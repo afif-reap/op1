@@ -20,6 +20,10 @@ import {
 	createKeywordStore,
 	createPureVectorStore,
 	createRepoMapStore,
+	createChunkStore,
+	createFileContentStore,
+	createContentFTSStore,
+	createGranularVectorStore,
 	EMBEDDING_MODEL_ID,
 	SCHEMA_VERSION,
 	type SchemaManager,
@@ -29,15 +33,30 @@ import {
 	type KeywordStore,
 	type PureVectorStore,
 	type RepoMapStore,
+	type ChunkStore,
+	type FileContentStore,
+	type ContentFTSStore,
+	type GranularVectorStore,
 } from "../storage";
 import {
 	createSymbolExtractor,
 	createAstInference,
+	createChunker,
 	type SymbolExtractor,
 	type AstInference,
+	type Chunker,
 } from "../extraction";
 import { createFastSyncCache, type FastSyncCache } from "./fast-sync-cache";
 import { createBranchManager, type BranchManager } from "./branch-manager";
+import {
+	createBatchProcessor,
+	chunksToEmbeddingItems,
+	symbolsToEmbeddingItems,
+	createAutoEmbedder,
+	type BatchProcessor,
+	type Embedder,
+} from "../embeddings";
+import { createFileWatcher, type FileWatcher } from "./file-watcher";
 
 export interface IndexManager {
 	/** Initialize the index manager */
@@ -75,6 +94,10 @@ export interface IndexManager {
 		keywords: KeywordStore;
 		vectors: PureVectorStore;
 		repoMap: RepoMapStore;
+		chunks: ChunkStore;
+		fileContents: FileContentStore;
+		contentFTS: ContentFTSStore;
+		granularVectors: GranularVectorStore;
 	};
 
 	/** Get current branch */
@@ -127,10 +150,18 @@ export async function createIndexManager(
 	let keywordStore: KeywordStore | null = null;
 	let vectorStore: PureVectorStore | null = null;
 	let repoMapStore: RepoMapStore | null = null;
+	let chunkStore: ChunkStore | null = null;
+	let fileContentStore: FileContentStore | null = null;
+	let contentFTSStore: ContentFTSStore | null = null;
+	let granularVectorStore: GranularVectorStore | null = null;
 	let syncCache: FastSyncCache | null = null;
 	let branchManager: BranchManager | null = null;
 	let symbolExtractor: SymbolExtractor | null = null;
 	let astInference: AstInference | null = null;
+	let chunker: Chunker | null = null;
+	let embedder: Embedder | null = null;
+	let batchProcessor: BatchProcessor | null = null;
+	let fileWatcher: FileWatcher | null = null;
 	let currentBranch = "main";
 
 	function ensureInitialized(): void {
@@ -165,7 +196,7 @@ export async function createIndexManager(
 	}
 
 	async function indexFileInternal(filePath: string): Promise<SymbolNode[]> {
-		if (!symbolExtractor || !symbolStore || !fileStore || !keywordStore || !edgeStore) {
+		if (!symbolExtractor || !symbolStore || !fileStore || !keywordStore || !edgeStore || !chunkStore || !contentFTSStore || !chunker) {
 			return [];
 		}
 
@@ -194,20 +225,25 @@ export async function createIndexManager(
 			const oldSymbols = symbolStore.getByFilePath(filePath, currentBranch);
 			const oldSymbolIds = oldSymbols.map((s) => s.id);
 
-			// Delete old symbols and edges for this file
+			// Delete old symbols, edges, and chunks for this file
 			symbolStore.deleteByFilePath(filePath, currentBranch);
 			keywordStore.deleteByFilePath(filePath);
+			chunkStore.deleteByFilePath(filePath, currentBranch);
+			contentFTSStore.deleteByFilePath(filePath);
 			
 			// Clean up edges where these symbols were source or target
 			if (oldSymbolIds.length > 0) {
 				edgeStore.deleteStaleEdges(oldSymbolIds, currentBranch);
 			}
 
+			// Determine language
+			const language = symbolExtractor.getLanguage(filePath) ?? "unknown";
+
 			// Store symbols
 			if (symbols.length > 0) {
 				symbolStore.upsertMany(symbols);
 
-				// Index in FTS
+				// Index symbols in FTS (legacy)
 				keywordStore.indexMany(
 					symbols.map((s) => ({
 						symbolId: s.id,
@@ -215,6 +251,17 @@ export async function createIndexManager(
 						qualifiedName: s.qualified_name,
 						content: s.content,
 						filePath: s.file_path,
+					})),
+				);
+
+				// Index symbols in unified FTS
+				contentFTSStore.indexMany(
+					symbols.map((s) => ({
+						content_id: s.id,
+						content_type: "symbol" as const,
+						file_path: s.file_path,
+						name: s.name,
+						content: s.content,
 					})),
 				);
 
@@ -251,6 +298,55 @@ export async function createIndexManager(
 				}
 			}
 
+			// Extract and store chunks (multi-granularity indexing)
+			const chunks = chunker.chunk(filePath, content, symbols, language, currentBranch);
+			if (chunks.length > 0) {
+				chunkStore.upsertMany(chunks);
+
+				// Index chunks in unified FTS
+				contentFTSStore.indexMany(
+					chunks.map((c) => ({
+						content_id: c.id,
+						content_type: c.chunk_type === "file" ? "file" as const : "chunk" as const,
+						file_path: c.file_path,
+						name: c.parent_symbol_id ? `chunk:${c.start_line}-${c.end_line}` : filePath,
+						content: c.content,
+					})),
+				);
+
+				// Generate embeddings for chunks (batch processing)
+				if (batchProcessor && granularVectorStore) {
+					const embeddingItems = chunksToEmbeddingItems(chunks);
+					try {
+						const embeddingResults = await batchProcessor.process(embeddingItems);
+						// Store embeddings in granular vector store
+						granularVectorStore.upsertMany(
+							embeddingResults.map((r) => ({
+								id: r.id,
+								embedding: r.embedding,
+								granularity: r.granularity,
+							})),
+						);
+					} catch (error) {
+						console.warn(`[code-intel] Failed to generate embeddings for ${filePath}:`, error);
+						// Continue without embeddings - they can be generated later
+					}
+				}
+			}
+
+			// Store file content for file-level search
+			if (fileContentStore && content.length > 0) {
+				const contentHash = new Bun.CryptoHasher("sha256").update(content).digest("hex").slice(0, 16);
+				fileContentStore.upsert({
+					file_path: filePath,
+					branch: currentBranch,
+					content: content.slice(0, 8000), // Truncate large files
+					content_hash: contentHash,
+					language,
+					updated_at: Date.now(),
+				});
+			}
+
 			// Update file record
 			const fileRecord: FileRecord = {
 				file_path: filePath,
@@ -258,7 +354,7 @@ export async function createIndexManager(
 				mtime: stat.mtimeMs,
 				size: stat.size,
 				last_indexed: Date.now(),
-				language: symbolExtractor.getLanguage(filePath) ?? "unknown",
+				language,
 				branch: currentBranch,
 				status: "indexed",
 				symbol_count: symbols.length,
@@ -295,8 +391,8 @@ export async function createIndexManager(
 				await indexFileInternal(filePath);
 				indexed++;
 
-				// Log progress every 100 files
-				if (indexed % 100 === 0) {
+				// Log progress every 10 files or at completion
+				if (indexed % 10 === 0 || indexed === files.length) {
 					console.log(`[code-intel] Indexed ${indexed}/${files.length} files`);
 				}
 			}
@@ -335,6 +431,10 @@ export async function createIndexManager(
 				keywordStore = createKeywordStore(schemaManager.db);
 				vectorStore = createPureVectorStore(schemaManager.db);
 				repoMapStore = createRepoMapStore(schemaManager.db);
+				chunkStore = createChunkStore(schemaManager.db);
+				fileContentStore = createFileContentStore(schemaManager.db);
+				contentFTSStore = createContentFTSStore(schemaManager.db);
+				granularVectorStore = createGranularVectorStore(schemaManager.db);
 
 				// Create sync cache
 				syncCache = await createFastSyncCache({
@@ -357,6 +457,46 @@ export async function createIndexManager(
 				// Create AST inference for edge extraction
 				astInference = createAstInference({ minConfidence: 0.3 });
 
+				// Create chunker for multi-granularity indexing
+				chunker = createChunker();
+
+				// Create embedder and batch processor for vector generation
+				embedder = await createAutoEmbedder();
+				batchProcessor = createBatchProcessor(embedder, {
+					batchSize: 32,
+					concurrency: 2,
+					maxRetries: 3,
+				});
+
+				// Create file watcher for real-time indexing
+				fileWatcher = createFileWatcher({
+					workspaceRoot,
+					ignorePatterns: config.ignorePatterns,
+					debounceMs: 300,
+				});
+
+				// Wire file watcher to incremental indexing
+				fileWatcher.onChanges(async (batch) => {
+					for (const change of batch.changes) {
+						if (change.type === "unlink") {
+							// Handle file deletion
+							const oldSymbols = symbolStore!.getByFilePath(change.path, currentBranch);
+							const oldSymbolIds = oldSymbols.map((s) => s.id);
+							symbolStore!.deleteByFilePath(change.path, currentBranch);
+							keywordStore!.deleteByFilePath(change.path);
+							chunkStore!.deleteByFilePath(change.path, currentBranch);
+							contentFTSStore!.deleteByFilePath(change.path);
+							fileStore!.deleteByPath(change.path, currentBranch);
+							if (oldSymbolIds.length > 0) {
+								edgeStore!.deleteStaleEdges(oldSymbolIds, currentBranch);
+							}
+						} else {
+							// Handle add/change - re-index the file
+							await indexFileInternal(change.path);
+						}
+					}
+				});
+
 				state = "ready";
 			} catch (error) {
 				state = "error";
@@ -375,6 +515,27 @@ export async function createIndexManager(
 			const totalSymbols = symbolStore!.count(currentBranch);
 			const totalEdges = edgeStore!.count(currentBranch);
 
+			// Chunk counts
+			const totalChunks = chunkStore!.count(currentBranch);
+			const symbolChunks = chunkStore!.getByChunkType("symbol", currentBranch, 1).length > 0 
+				? chunkStore!.count(currentBranch) : 0; // Simplified - count all for now
+			
+			// Embedding counts by granularity
+			const symbolEmbeddings = granularVectorStore!.count("symbol");
+			const chunkEmbeddings = granularVectorStore!.count("chunk");
+			const fileEmbeddings = granularVectorStore!.count("file");
+			const totalEmbeddings = granularVectorStore!.count();
+
+			// Watcher status
+			let watcherStatus: { active: boolean; pending_changes: number; last_update: number | null } | undefined;
+			if (fileWatcher !== null) {
+				watcherStatus = {
+					active: fileWatcher.isActive(),
+					pending_changes: fileWatcher.getPendingChanges().length,
+					last_update: null,
+				};
+			}
+
 			return {
 				state,
 				total_files: totalFiles,
@@ -384,10 +545,23 @@ export async function createIndexManager(
 				stale_files: staleFiles,
 				total_symbols: totalSymbols,
 				total_edges: totalEdges,
+				total_chunks: totalChunks,
+				chunk_counts: {
+					symbol: symbolChunks,
+					block: 0, // TODO: count by type
+					file: 0,
+				},
+				total_embeddings: totalEmbeddings,
+				embedding_counts: {
+					symbol: symbolEmbeddings,
+					chunk: chunkEmbeddings,
+					file: fileEmbeddings,
+				},
 				last_full_index: null, // TODO: Track this
 				current_branch: currentBranch,
 				embedding_model_id: EMBEDDING_MODEL_ID,
 				schema_version: SCHEMA_VERSION,
+				watcher: watcherStatus,
 			};
 		},
 
@@ -406,15 +580,27 @@ export async function createIndexManager(
 
 			const files = await collectFiles();
 			const changes = await syncCache!.findChangedFiles(files);
+			
+			const totalChanges = changes.added.length + changes.modified.length;
+			let processed = 0;
 
 			// Process added files
 			for (const filePath of changes.added) {
 				await indexFileInternal(filePath);
+				processed++;
+				// Log progress every 10 files or at completion
+				if (processed % 10 === 0 || processed === totalChanges) {
+					console.log(`[code-intel] Indexed ${processed}/${totalChanges} files`);
+				}
 			}
 
 			// Process modified files
 			for (const filePath of changes.modified) {
 				await indexFileInternal(filePath);
+				processed++;
+				if (processed % 10 === 0 || processed === totalChanges) {
+					console.log(`[code-intel] Indexed ${processed}/${totalChanges} files`);
+				}
 			}
 
 			// Process removed files
@@ -483,6 +669,10 @@ export async function createIndexManager(
 				keywords: keywordStore!,
 				vectors: vectorStore!,
 				repoMap: repoMapStore!,
+				chunks: chunkStore!,
+				fileContents: fileContentStore!,
+				contentFTS: contentFTSStore!,
+				granularVectors: granularVectorStore!,
 			};
 		},
 
