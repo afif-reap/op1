@@ -88,6 +88,54 @@ export interface SymbolEdge {
 }
 
 // ============================================================================
+// Chunk Types (Multi-Granularity Indexing)
+// ============================================================================
+
+export type ChunkType = "symbol" | "block" | "file";
+
+export type Granularity = "symbol" | "chunk" | "file";
+
+export interface ChunkNode {
+	/** Canonical ID: hash(file_path + start_line + end_line + content_hash) */
+	id: string;
+	/** File path relative to workspace */
+	file_path: string;
+	/** Start line (1-indexed) */
+	start_line: number;
+	/** End line (1-indexed) */
+	end_line: number;
+	/** Chunk content */
+	content: string;
+	/** How this chunk was created */
+	chunk_type: ChunkType;
+	/** Parent symbol ID if chunk is symbol-aligned */
+	parent_symbol_id?: string;
+	/** Language identifier */
+	language: "typescript" | "python" | "unknown";
+	/** Content hash for change detection */
+	content_hash: string;
+	/** Git branch name */
+	branch: string;
+	/** Last update timestamp */
+	updated_at: number;
+}
+
+export interface FileContent {
+	/** File path (primary key with branch) */
+	file_path: string;
+	/** Git branch name */
+	branch: string;
+	/** Full file content (truncated for large files) */
+	content: string;
+	/** Content hash for change detection */
+	content_hash: string;
+	/** Language identifier */
+	language: "typescript" | "python" | "unknown";
+	/** Last update timestamp */
+	updated_at: number;
+}
+
+// ============================================================================
 // File Types
 // ============================================================================
 
@@ -160,10 +208,38 @@ export interface IndexStatus {
 	stale_files: number;
 	total_symbols: number;
 	total_edges: number;
+	/** Total chunks across all granularities */
+	total_chunks: number;
+	/** Chunks by type */
+	chunk_counts: {
+		symbol: number;
+		block: number;
+		file: number;
+	};
+	/** Total embeddings stored */
+	total_embeddings: number;
+	/** Embeddings by granularity */
+	embedding_counts: {
+		symbol: number;
+		chunk: number;
+		file: number;
+	};
 	last_full_index: number | null;
 	current_branch: string;
 	embedding_model_id: string;
 	schema_version: number;
+	/** File watcher status */
+	watcher?: {
+		active: boolean;
+		pending_changes: number;
+		last_update: number | null;
+	};
+	/** Context cache stats */
+	cache?: {
+		size: number;
+		max_size: number;
+		hit_rate: number;
+	};
 }
 
 // ============================================================================
