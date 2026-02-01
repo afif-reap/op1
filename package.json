@@ -4,8 +4,12 @@
 	"version": "0.0.0",
 	"description": "op1 - OpenCode harness with batteries included",
 	"workspaces": [
-		"packages/*"
+		"packages/*",
+		"packages/stubs/*"
 	],
+	"overrides": {
+		"sharp": "file:packages/stubs/sharp"
+	},
 	"scripts": {
 		"build": "bun --filter '*' build",
 		"typecheck": "bun --filter '*' typecheck",
@@ -25,6 +29,7 @@
 		"@biomejs/biome": "^2.3.11",
 		"@huggingface/transformers": "^3.8.1",
 		"@types/bun": "^1.1.0",
+		"sharp": "file:packages/stubs/sharp",
 		"typescript": "^5.7.0"
 	},
 	"engines": {
